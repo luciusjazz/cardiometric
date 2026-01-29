@@ -315,6 +315,8 @@
         <div id="review-section" class="hidden mt-6 bg-white rounded-lg shadow-lg p-4 md:p-6">
             <h2 class="text-xl font-bold text-gray-800 mb-4">Revisão e Exportação</h2>
             <div class="review-chart-container mb-2 bg-gray-50 rounded"><canvas id="reviewChart"></canvas></div>
+            <div class="review-chart-container mb-2 bg-gray-50 rounded" style="height: 15vh;"><canvas
+                    id="hrTrendChart"></canvas></div>
             <div id="markersList" class="mb-4 text-sm text-gray-700"></div>
             <div id="review-nav" class="flex flex-col md:flex-row items-center justify-between gap-3 mb-4">
                 <div class="flex items-center gap-2">
@@ -419,9 +421,10 @@
                 hrOverlayMin: document.getElementById('hr-overlay-min'),
                 hrOverlayAvg: document.getElementById('hr-overlay-avg'),
                 hrOverlayPeak: document.getElementById('hr-overlay-peak'),
+                hrTrendChartCanvas: document.getElementById('hrTrendChart'),
             };
 
-            let ecgChart, reviewChart, timerInterval, recordedData = [], recordedMarkers = [], liveBuffer = [], frozenBuffer = [], frozenSource = [], isRecording = false, isConnected = false, isFrozen = false, polarDevice, startTime, signalProcessor;
+            let ecgChart, reviewChart, hrTrendChart, timerInterval, recordedData = [], recordedMarkers = [], liveBuffer = [], frozenBuffer = [], frozenSource = [], isRecording = false, isConnected = false, isFrozen = false, polarDevice, startTime, signalProcessor;
             let currentLiveFilterType = 'none';
             let lastHr = null, lastRr = [];
             let hrSamples = [], avgHr = 0, peakHr = 0, minHr = 300;
@@ -672,6 +675,19 @@
                 updateLiveMarkersDataset();
             });
 
+            // Extrai dados de FC únicos para o gráfico de tendência
+            function extractHrTrendData() {
+                const hrPoints = [];
+                let lastHr = null;
+                for (const d of recordedData) {
+                    if (d.hr && d.hr !== lastHr) {
+                        hrPoints.push({ time: d.time, hr: d.hr });
+                        lastHr = d.hr;
+                    }
+                }
+                return hrPoints;
+            }
+
             function displayReview() {
                 allElements.reviewSection.classList.remove('hidden');
                 if (reviewChart) reviewChart.destroy();
@@ -696,6 +712,36 @@
                 // Inicializa navegação
                 setTimeout(updateReviewNavFromChart, 0);
                 renderMarkersList();
+                // Criar gráfico de tendência de FC
+                if (hrTrendChart) hrTrendChart.destroy();
+                const hrData = extractHrTrendData();
+                if (hrData.length > 0 && allElements.hrTrendChartCanvas) {
+                    hrTrendChart = new Chart(allElements.hrTrendChartCanvas.getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: hrData.map(d => d.time.toFixed(2)),
+                            datasets: [{
+                                label: 'FC (bpm)',
+                                data: hrData.map(d => d.hr),
+                                borderColor: 'rgb(239, 68, 68)',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            scales: {
+                                x: { title: { display: true, text: 'Tempo (s)' }, ticks: { autoSkip: true, maxTicksLimit: 10 } },
+                                y: { title: { display: true, text: 'FC (bpm)' }, suggestedMin: 40, suggestedMax: 180 }
+                            },
+                            plugins: { legend: { display: false } }
+                        }
+                    });
+                }
             }
 
             function updateReviewFilterInputs() {
