@@ -430,6 +430,7 @@
             };
 
             let ecgChart, reviewChart, hrTrendChart, timerInterval, recordedData = [], recordedMarkers = [], liveBuffer = [], frozenBuffer = [], frozenSource = [], isRecording = false, isConnected = false, isFrozen = false, polarDevice, startTime, signalProcessor;
+            let recordingStartTime = null; // Tempo de início da gravação (reset ao iniciar)
             let wakeLock = null; // Wake Lock para manter tela ligada durante gravação
             let hasUnsavedData = false; // Controla se há dados não salvos
             let autoSaveInterval = null; // Intervalo de auto-save
@@ -587,19 +588,27 @@
                 const value = event.target.value;
                 const bytes = new Uint8Array(value.buffer);
                 const sampleTimeIncrement = 1 / SAMPLE_RATE_HZ;
-                let baseTime = (Date.now() - startTime) / 1000;
+                // Tempo para visualização ao vivo (desde conexão)
+                let liveTime = (Date.now() - startTime) / 1000;
+                // Tempo para gravação (desde início da gravação, começa em 0)
+                let recordTime = recordingStartTime ? (Date.now() - recordingStartTime) / 1000 : 0;
                 let offset = 10;
                 let currentRrIndex = 0;
                 while (offset + 2 < bytes.length) {
                     let sample = (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16));
                     if (sample & 0x800000) sample -= 0x1000000;
-                    const timeLabel = baseTime; // manter alta resolução temporal para PDF/analítica
                     const rrValue = (lastRr && currentRrIndex < lastRr.length) ? lastRr[currentRrIndex] : '';
-                    const dataPoint = { time: timeLabel, signal: sample, hr: lastHr, rr: rrValue, marker: '' };
-                    liveBuffer.push(dataPoint);
-                    if (isRecording) recordedData.push(dataPoint);
+                    // Dados ao vivo usam tempo desde conexão
+                    const liveDataPoint = { time: liveTime, signal: sample, hr: lastHr, rr: rrValue, marker: '' };
+                    liveBuffer.push(liveDataPoint);
+                    // Dados gravados usam tempo desde início da gravação (começa em 0)
+                    if (isRecording) {
+                        const recordDataPoint = { time: recordTime, signal: sample, hr: lastHr, rr: rrValue, marker: '' };
+                        recordedData.push(recordDataPoint);
+                    }
                     if (rrValue !== '') currentRrIndex++;
-                    baseTime += sampleTimeIncrement;
+                    liveTime += sampleTimeIncrement;
+                    recordTime += sampleTimeIncrement;
                     offset += 3;
                 }
                 lastRr = [];
@@ -716,6 +725,7 @@
                 if (isRecording) {
                     recordedData = [];
                     recordedMarkers = [];
+                    recordingStartTime = Date.now(); // RESET: tempo começa do zero ao gravar
                     hasUnsavedData = true; // Marcar dados não salvos
                     resetMetrics();
                     allElements.metricsPanel.classList.remove('hidden');
@@ -769,7 +779,8 @@
 
             allElements.addMarkerButton.addEventListener('click', () => {
                 if (!isRecording) return;
-                const time = (Date.now() - startTime) / 1000;
+                // Tempo relativo ao início da gravação (não da conexão)
+                const time = recordingStartTime ? (Date.now() - recordingStartTime) / 1000 : 0;
                 const label = allElements.markerInput.value || 'Marcador';
                 recordedMarkers.push({ time: time, label: label });
                 allElements.markerInput.value = '';
