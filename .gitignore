@@ -1,0 +1,26 @@
+# Sistema
+.DS_Store
+*.DS_Store
+Thumbs.db
+
+# Backups antigos
+*.zip
+
+# Pasta do agente
+.agent/
+
+# Arquivos de sessão do usuário (dados pessoais)
+*_SESSION.json
+
+# Versões antigas (mantemos apenas no archive/)
+ecg_v*.html
+!index.html
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node (caso adicione no futuro)
+node_modules/
