@@ -319,28 +319,40 @@
             <div class="review-chart-container mb-2 bg-gray-50 rounded" style="height: 20vh;"><canvas
                     id="hrTrendChart"></canvas></div>
             <div id="markersList" class="mb-4 text-sm text-gray-700"></div>
-            <div id="review-nav" class="flex flex-col md:flex-row items-center justify-between gap-3 mb-4">
+            <!-- Controles de navegação no topo para fácil acesso em mobile -->
+            <div id="review-nav" class="flex flex-col gap-3 mb-4 sticky top-0 bg-white z-10 py-2">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                    <div class="flex items-center gap-1">
+                        <button id="reviewZoomOut"
+                            class="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 font-bold text-lg"
+                            title="Zoom Out">−</button>
+                        <button id="reviewZoomIn"
+                            class="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 font-bold text-lg"
+                            title="Zoom In">+</button>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button id="reviewPanFarLeft"
+                            class="bg-gray-200 text-gray-700 px-3 py-2 rounded hover:bg-gray-300">«</button>
+                        <button id="reviewPanLeft"
+                            class="bg-gray-200 text-gray-700 px-3 py-2 rounded hover:bg-gray-300">‹</button>
+                        <button id="reviewReset"
+                            class="bg-gray-200 text-gray-700 px-3 py-2 rounded hover:bg-gray-300">Reset</button>
+                        <button id="reviewPanRight"
+                            class="bg-gray-200 text-gray-700 px-3 py-2 rounded hover:bg-gray-300">›</button>
+                        <button id="reviewPanFarRight"
+                            class="bg-gray-200 text-gray-700 px-3 py-2 rounded hover:bg-gray-300">»</button>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div id="review-window-label" class="text-sm text-gray-600 font-mono">0.00–0.00 s</div>
+                        <label class="inline-flex items-center text-sm text-gray-700">
+                            <input type="checkbox" id="reviewFullscreenToggle" class="mr-2">
+                            Expandir
+                        </label>
+                    </div>
+                </div>
                 <div class="flex items-center gap-2">
-                    <button id="reviewPanFarLeft"
-                        class="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300">«</button>
-                    <button id="reviewPanLeft"
-                        class="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300">‹</button>
-                    <button id="reviewReset"
-                        class="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300">Reset</button>
-                    <button id="reviewPanRight"
-                        class="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300">›</button>
-                    <button id="reviewPanFarRight"
-                        class="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300">»</button>
-                </div>
-                <div class="flex-1 flex items-center gap-2">
-                    <input type="range" id="review-scroll-bar" class="w-full" value="0" min="0" max="0">
-                </div>
-                <div class="flex items-center gap-3">
-                    <div id="review-window-label" class="text-sm text-gray-600 font-mono">0.00–0.00 s</div>
-                    <label class="inline-flex items-center text-sm text-gray-700">
-                        <input type="checkbox" id="reviewFullscreenToggle" class="mr-2">
-                        Expandir revisão
-                    </label>
+                    <input type="range" id="review-scroll-bar" class="w-full h-6" value="0" min="0" max="0"
+                        style="touch-action: manipulation;">
                 </div>
             </div>
             <div class="border-t border-b py-4 mb-4">
@@ -427,10 +439,57 @@
 
             let ecgChart, reviewChart, hrTrendChart, timerInterval, recordedData = [], recordedMarkers = [], liveBuffer = [], frozenBuffer = [], frozenSource = [], isRecording = false, isConnected = false, isFrozen = false, polarDevice, startTime, signalProcessor;
             let wakeLock = null; // Wake Lock para manter tela ligada durante gravação
+            let hasUnsavedData = false; // Controla se há dados não salvos
+            let autoSaveInterval = null; // Intervalo de auto-save
             let currentLiveFilterType = 'none';
             let lastHr = null, lastRr = [];
             let hrSamples = [], avgHr = 0, peakHr = 0, minHr = 300;
             let enableLiveFilter = true;
+
+            // Aviso ao tentar sair da página com dados não salvos
+            window.addEventListener('beforeunload', (e) => {
+                if (hasUnsavedData || isRecording || recordedData.length > 0) {
+                    e.preventDefault();
+                    e.returnValue = 'Você tem dados de gravação não salvos. Deseja realmente sair?';
+                    return e.returnValue;
+                }
+            });
+
+            // Auto-save no IndexedDB a cada 30 segundos durante gravação
+            function startAutoSave() {
+                if (autoSaveInterval) return;
+                autoSaveInterval = setInterval(async () => {
+                    if (recordedData.length > 0) {
+                        try {
+                            const db = await openDB();
+                            const payload = {
+                                name: '__autosave__',
+                                createdAt: new Date().toISOString(),
+                                participant: allElements.participantIdInput.value,
+                                condition: allElements.conditionSelect.value,
+                                sampleRate: SAMPLE_RATE_HZ,
+                                data: recordedData,
+                                markers: recordedMarkers
+                            };
+                            await new Promise((resolve, reject) => {
+                                const tx = db.transaction('sessions', 'readwrite');
+                                tx.objectStore('sessions').put(payload);
+                                tx.oncomplete = resolve;
+                                tx.onerror = reject;
+                            });
+                            console.log('Auto-save realizado:', recordedData.length, 'pontos');
+                        } catch (err) {
+                            console.warn('Auto-save falhou:', err);
+                        }
+                    }
+                }, 30000); // 30 segundos
+            }
+            function stopAutoSave() {
+                if (autoSaveInterval) {
+                    clearInterval(autoSaveInterval);
+                    autoSaveInterval = null;
+                }
+            }
 
             const HEART_RATE_SERVICE_UUID = "heart_rate";
             const HEART_RATE_CHARACTERISTIC_UUID = "heart_rate_measurement";
@@ -649,12 +708,15 @@
                 if (isRecording) {
                     recordedData = [];
                     recordedMarkers = [];
+                    hasUnsavedData = true; // Marcar dados não salvos
                     resetMetrics();
                     allElements.metricsPanel.classList.remove('hidden');
                     startTimer();
                     setSaveButtonsState();
                     await requestWakeLock(); // Manter tela ligada
+                    startAutoSave(); // Iniciar auto-save
                 } else {
+                    stopAutoSave(); // Parar auto-save
                     await releaseWakeLock(); // Liberar Wake Lock
                     allElements.metricsPanel.classList.add('hidden');
                     allElements.timerDisplay.classList.add('hidden');
@@ -941,6 +1003,9 @@
             allElements.reviewPanFarLeft?.addEventListener('click', () => setReviewWindow(0, reviewChart.data.labels.length));
             allElements.reviewPanFarRight?.addEventListener('click', () => setReviewWindow(reviewChart.data.labels.length - (getReviewWindow().maxIdx - getReviewWindow().minIdx + 1), (getReviewWindow().maxIdx - getReviewWindow().minIdx + 1)));
             allElements.reviewReset?.addEventListener('click', resetReviewView);
+            // Botões de zoom
+            document.getElementById('reviewZoomIn')?.addEventListener('click', () => zoomReview(0.6)); // Zoom in mais agressivo
+            document.getElementById('reviewZoomOut')?.addEventListener('click', () => zoomReview(1.6)); // Zoom out mais agressivo
 
             // Teclas de atalho: ←/→ pan, +/- zoom
             window.addEventListener('keydown', (e) => {
@@ -1150,12 +1215,14 @@
                 if (recordedData.length === 0) { alert('Nenhum dado para exportar.'); return; }
                 const filename = `${getFileName()}_SESSION.json`;
                 triggerDownload(filename, serializeSession());
+                hasUnsavedData = false; // Dados foram salvos
                 alert('Arquivo de sessão exportado. Guarde-o em local seguro.');
             });
             document.getElementById('exportSessionFromReviewButton')?.addEventListener('click', () => {
                 if (recordedData.length === 0) { alert('Nenhum dado para exportar.'); return; }
                 const filename = `${getFileName()}_SESSION.json`;
                 triggerDownload(filename, serializeSession());
+                hasUnsavedData = false; // Dados foram salvos
             });
             function readFileAsText(file) {
                 return new Promise((resolve, reject) => {
@@ -1493,6 +1560,37 @@
 
             initChart();
             updateFilterInputs();
+
+            // Verificar se há sessão auto-salva
+            (async function checkAutoSave() {
+                try {
+                    const db = await openDB();
+                    const tx = db.transaction('sessions', 'readonly');
+                    const req = tx.objectStore('sessions').get('__autosave__');
+                    req.onsuccess = () => {
+                        const sess = req.result;
+                        if (sess && sess.data && sess.data.length > 0) {
+                            const createdAt = sess.createdAt ? new Date(sess.createdAt).toLocaleString() : 'desconhecido';
+                            const duration = sess.data.length > 0 ? (sess.data[sess.data.length - 1].time / 60).toFixed(1) : 0;
+                            if (confirm(`🔄 Sessão não salva encontrada!\n\nData: ${createdAt}\nDuração: ~${duration} min\nPontos: ${sess.data.length}\n\nDeseja recuperar esta sessão?`)) {
+                                recordedData = sess.data || [];
+                                recordedMarkers = sess.markers || [];
+                                allElements.participantIdInput.value = sess.participant || '';
+                                allElements.conditionSelect.value = sess.condition || 'Repouso';
+                                hasUnsavedData = true;
+                                displayReview();
+                                alert('Sessão recuperada! Por favor, exporte para arquivo assim que possível.');
+                            } else {
+                                // Limpar auto-save se usuário não quiser recuperar
+                                const delTx = db.transaction('sessions', 'readwrite');
+                                delTx.objectStore('sessions').delete('__autosave__');
+                            }
+                        }
+                    };
+                } catch (err) {
+                    console.warn('Falha ao verificar auto-save:', err);
+                }
+            })();
             // Registrar service worker
             if ('serviceWorker' in navigator) {
                 window.addEventListener('load', () => {
