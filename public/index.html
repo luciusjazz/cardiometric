@@ -426,6 +426,7 @@
             };
 
             let ecgChart, reviewChart, hrTrendChart, timerInterval, recordedData = [], recordedMarkers = [], liveBuffer = [], frozenBuffer = [], frozenSource = [], isRecording = false, isConnected = false, isFrozen = false, polarDevice, startTime, signalProcessor;
+            let wakeLock = null; // Wake Lock para manter tela ligada durante gravação
             let currentLiveFilterType = 'none';
             let lastHr = null, lastRr = [];
             let hrSamples = [], avgHr = 0, peakHr = 0, minHr = 300;
@@ -610,9 +611,36 @@
             function showError(message) { allElements.errorText.textContent = message; allElements.errorMessage.classList.remove('hidden'); }
             function hideError() { allElements.errorMessage.classList.add('hidden'); }
 
+            // Wake Lock: mantém tela ligada durante gravação
+            async function requestWakeLock() {
+                if ('wakeLock' in navigator) {
+                    try {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        console.log('Wake Lock ativado');
+                        // Reativar se a página voltar a ficar visível
+                        document.addEventListener('visibilitychange', handleVisibilityChange);
+                    } catch (err) {
+                        console.warn('Wake Lock falhou:', err);
+                    }
+                }
+            }
+            async function releaseWakeLock() {
+                if (wakeLock) {
+                    await wakeLock.release();
+                    wakeLock = null;
+                    console.log('Wake Lock liberado');
+                    document.removeEventListener('visibilitychange', handleVisibilityChange);
+                }
+            }
+            async function handleVisibilityChange() {
+                if (document.visibilityState === 'visible' && isRecording && !wakeLock) {
+                    await requestWakeLock();
+                }
+            }
+
             allElements.connectButton.addEventListener('click', () => { isConnected ? updateConnectionStatus(false) : connectToPolar(); });
 
-            allElements.recordButton.addEventListener('click', () => {
+            allElements.recordButton.addEventListener('click', async () => {
                 isRecording = !isRecording;
                 allElements.recordButton.textContent = isRecording ? 'Parar Gravação' : 'Iniciar Gravação';
                 allElements.recordButton.classList.toggle('btn-record-active', isRecording);
@@ -625,7 +653,9 @@
                     allElements.metricsPanel.classList.remove('hidden');
                     startTimer();
                     setSaveButtonsState();
+                    await requestWakeLock(); // Manter tela ligada
                 } else {
+                    await releaseWakeLock(); // Liberar Wake Lock
                     allElements.metricsPanel.classList.add('hidden');
                     allElements.timerDisplay.classList.add('hidden');
                     clearInterval(timerInterval);
@@ -1299,7 +1329,11 @@
                             // Evita conectar sobre quedas de pacote ou saltos anômalos
                             const dt = p2.time - p1.time;
                             const dAmp = Math.abs(s2 - s1);
-                            if (dt > 0.05 || dAmp > 2500) continue; // 50 ms ou salto > 2.5 mV
+                            const expectedDt = 1 / SAMPLE_RATE_HZ; // ~7.7ms para 130Hz
+                            // Gap: delta tempo > 3x esperado (~23ms) 
+                            // Comprimido: delta X muito pequeno (pontos ficariam sobrepostos)
+                            const dx = x2 - x1;
+                            if (dt > expectedDt * 3 || dt < expectedDt * 0.1 || dAmp > 2000 || dx < 0.1) continue;
                             // Evita estourar o limite direito
                             if (x2 <= margin + chartWidth) doc.line(x1, y1, x2, y2);
                         }
