@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@1.2.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.2.1"></script>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -700,11 +701,10 @@
                     type: 'line',
                     data: {
                         labels: labels, datasets: [
-                            { label: 'Registo Completo (µV)', data: data, borderColor: 'rgb(75, 192, 192)', borderWidth: 1, pointRadius: 0 },
-                            { label: 'Marcadores', data: buildMarkersAligned(labels), borderColor: 'rgba(255,0,0,0)', pointBackgroundColor: 'red', pointRadius: 4, showLine: false }
+                            { label: 'Registo Completo (µV)', data: data, borderColor: 'rgb(75, 192, 192)', borderWidth: 1, pointRadius: 0 }
                         ]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { title: { text: 'Tempo (s)' }, ticks: { autoSkip: true, maxTicksLimit: 8, callback: function (value) { const labels = this.chart?.data?.labels || []; const lbl = labels[Math.round(value)] ?? value; const n = Number(lbl); return Number.isFinite(n) ? n.toFixed(2) : lbl; } } } }, plugins: { zoom: { pan: { enabled: true, mode: 'x', onPanComplete: () => { updateReviewNavFromChart(); } }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, drag: { enabled: true, modifierKey: null }, mode: 'x', onZoomComplete: () => { updateReviewNavFromChart(); } } }, tooltip: { callbacks: { label: function (ctx) { if (ctx.datasetIndex === 1) { const t = Number(ctx.label); const mk = findNearestMarker(t); return mk ? `Marcador: ${mk.label} (${t.toFixed(2)} s)` : `Marcador (${t.toFixed(2)} s)`; } const y = ctx.parsed.y; return `ECG: ${Math.round(y)} µV @ ${Number(ctx.label).toFixed(2)} s`; } } } } }
+                    options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { title: { text: 'Tempo (s)' }, ticks: { autoSkip: true, maxTicksLimit: 8, callback: function (value) { const labels = this.chart?.data?.labels || []; const lbl = labels[Math.round(value)] ?? value; const n = Number(lbl); return Number.isFinite(n) ? n.toFixed(2) : lbl; } } } }, plugins: { annotation: { annotations: buildMarkerAnnotations(labels) }, zoom: { pan: { enabled: true, mode: 'x', onPanComplete: () => { updateReviewNavFromChart(); } }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, drag: { enabled: true, modifierKey: null }, mode: 'x', onZoomComplete: () => { updateReviewNavFromChart(); } } }, tooltip: { callbacks: { label: function (ctx) { const y = ctx.parsed.y; return `ECG: ${Math.round(y)} µV @ ${Number(ctx.label).toFixed(2)} s`; } } } } }
                 });
                 // Atualiza filtros de revisão e aplica imediatamente
                 updateReviewFilterInputs();
@@ -801,7 +801,8 @@
                 const data = recordedData.map(d => proc.process(d.signal, selected));
                 reviewChart.data.labels = labels;
                 reviewChart.data.datasets[0].data = data;
-                reviewChart.data.datasets[1].data = buildMarkersAligned(labels);
+                // Atualizar annotations de marcadores
+                reviewChart.options.plugins.annotation.annotations = buildMarkerAnnotations(labels);
                 reviewChart.update('none');
                 updateReviewNavFromChart();
                 renderMarkersList();
@@ -999,6 +1000,38 @@
                     if (bestIndex >= 0) out[bestIndex] = 0; // posicao neutra; so para desenhar o ponto
                 });
                 return out;
+            }
+
+            // Gera annotations de linhas verticais para marcadores
+            function buildMarkerAnnotations(labels) {
+                const annotations = {};
+                recordedMarkers.forEach((m, idx) => {
+                    // Encontrar índice mais próximo
+                    let bestIndex = -1; let bestDelta = Infinity;
+                    for (let i = 0; i < labels.length; i++) {
+                        const delta = Math.abs(labels[i] - m.time);
+                        if (delta < bestDelta) { bestDelta = delta; bestIndex = i; }
+                    }
+                    if (bestIndex >= 0) {
+                        annotations[`marker_${idx}`] = {
+                            type: 'line',
+                            xMin: bestIndex,
+                            xMax: bestIndex,
+                            borderColor: 'rgba(239, 68, 68, 0.8)',
+                            borderWidth: 2,
+                            borderDash: [5, 3],
+                            label: {
+                                display: true,
+                                content: m.label || `M${idx + 1}`,
+                                position: 'start',
+                                backgroundColor: 'rgba(239, 68, 68, 0.9)',
+                                color: 'white',
+                                font: { size: 10 }
+                            }
+                        };
+                    }
+                });
+                return annotations;
             }
 
             function getSelectedData() {
