@@ -171,15 +171,7 @@
                     <input type="text" id="participantId" class="w-full border-gray-300 rounded-md shadow-sm"
                         placeholder="Ex: 001">
                 </div>
-                <div class="flex items-center gap-2">
-                    <label for="conditionSelect" class="font-semibold text-gray-700">Condição:</label>
-                    <select id="conditionSelect" class="w-full border-gray-300 rounded-md shadow-sm">
-                        <option>Repouso</option>
-                        <option>Exercicio</option>
-                        <option>Pos_Exercicio</option>
-                        <option>Outra</option>
-                    </select>
-                </div>
+                <!-- Campo Condição removido - usuários usam marcadores para separar fases -->
                 <div class="flex items-center gap-4 flex-wrap">
                     <div id="status-display"
                         class="flex items-center justify-center px-4 py-2 rounded-full bg-gray-200 text-gray-700 font-semibold">
@@ -466,7 +458,7 @@
                                 name: '__autosave__',
                                 createdAt: new Date().toISOString(),
                                 participant: allElements.participantIdInput.value,
-                                condition: allElements.conditionSelect.value,
+                                condition: allElements.conditionSelect?.value || 'Coleta',
                                 sampleRate: SAMPLE_RATE_HZ,
                                 data: recordedData,
                                 markers: recordedMarkers
@@ -946,9 +938,13 @@
                 }
                 if (allElements.reviewScrollBar) {
                     const windowSize = (maxIdx - minIdx + 1);
-                    allElements.reviewScrollBar.max = Math.max(0, labels.length - windowSize);
+                    const totalPoints = labels.length;
+                    allElements.reviewScrollBar.max = Math.max(0, totalPoints - windowSize);
                     allElements.reviewScrollBar.value = String(minIdx);
                     allElements.reviewScrollBar.dataset.window = String(windowSize);
+                    // Step dinâmico para suavizar scroll (mínimo 10% da janela ou 100 pontos)
+                    const step = Math.max(1, Math.floor(windowSize * 0.1), Math.floor(totalPoints / 500));
+                    allElements.reviewScrollBar.step = String(step);
                 }
                 // Sincronizar gráfico de FC
                 syncHrChartFromEcg();
@@ -1155,7 +1151,7 @@
 
             function getFileName() {
                 const pId = allElements.participantIdInput.value.replace(/ /g, "_") || 'UNKNOWN';
-                const cond = allElements.conditionSelect.value || 'NOCONDITION';
+                const cond = allElements.conditionSelect?.value || 'Coleta';
                 return `ecg_data_${pId}_${cond}_${new Date().toISOString().replace(/[:.]/g, '-')}`;
             }
 
@@ -1182,7 +1178,7 @@
                     name,
                     createdAt: new Date().toISOString(),
                     participant: allElements.participantIdInput.value,
-                    condition: allElements.conditionSelect.value,
+                    condition: allElements.conditionSelect?.value || 'Coleta',
                     sampleRate: SAMPLE_RATE_HZ,
                     data: recordedData,
                     markers: recordedMarkers
@@ -1213,7 +1209,7 @@
             function serializeSession() {
                 return JSON.stringify({
                     participant: allElements.participantIdInput.value,
-                    condition: allElements.conditionSelect.value,
+                    condition: allElements.conditionSelect?.value || 'Coleta',
                     sampleRate: SAMPLE_RATE_HZ,
                     data: recordedData,
                     markers: recordedMarkers,
@@ -1259,7 +1255,7 @@
                         recordedData = sess.data || [];
                         recordedMarkers = sess.markers || [];
                         allElements.participantIdInput.value = sess.participant || '';
-                        allElements.conditionSelect.value = sess.condition || 'Repouso';
+                        // Campo condição foi removido
                         displayReview();
                         alert('Sessão importada do arquivo.');
                     } catch (e) {
@@ -1305,7 +1301,7 @@
                 if (dataToExport.length === 0) { alert("Nenhum dado no intervalo selecionado."); return; }
                 const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
                 const pageWidth = doc.internal.pageSize.getWidth(); const pageHeight = doc.internal.pageSize.getHeight(); const margin = 10;
-                const pId = allElements.participantIdInput.value || 'Desconhecido'; const cond = allElements.conditionSelect.value || 'N/A';
+                const pId = allElements.participantIdInput.value || 'Desconhecido'; const cond = allElements.conditionSelect?.value || 'Coleta';
                 const avgHrVal = allElements.avgHrValue.textContent; const peakHrVal = allElements.peakHrValue.textContent; const minHrVal = allElements.minHrValue.textContent;
                 const timePerStrip = 8; const stripsPerPage = 4; // 25 mm/s padrão
                 // Ordena por tempo e agrupa por delta de tempo ~1/SR
@@ -1467,18 +1463,61 @@
                         doc.text(`${minutes}:${seconds.toString().padStart(2, '0')}`, xPos, chartTop + chartH + 5, { align: 'center' });
                     }
 
-                    // Desenhar linha de FC com preenchimento suave
-                    // Primeiro o preenchimento
-                    doc.setFillColor(255, 230, 230);
+                    // Desenhar área preenchida e linha de FC
+                    // Preparar pontos do path
                     let pathPoints = [];
                     for (let i = 0; i < hrData.length; i++) {
                         const p = hrData[i];
                         const x = chartLeft + ((p.time - timeMin) / timeRange) * chartW;
                         const y = chartTop + ((hrYMax - p.hr) / (hrYMax - hrYMin)) * chartH;
-                        pathPoints.push({ x, y, time: p.time });
+                        pathPoints.push({ x, y, time: p.time, origTime: hrData[i].time });
                     }
 
-                    // Linha principal de FC
+                    // Desenhar área preenchida com gradiente simulado (várias linhas verticais)
+                    // Cor vermelha clara com gradiente de cima para baixo
+                    const baseY = chartTop + chartH; // Base do gráfico
+
+                    // Agrupa pontos contínuos (sem gaps) e desenha polígonos
+                    let segments = [];
+                    let currentSegment = [];
+                    for (let i = 0; i < pathPoints.length; i++) {
+                        if (currentSegment.length === 0) {
+                            currentSegment.push(pathPoints[i]);
+                        } else if (i > 0 && hrData[i].time - hrData[i - 1].time < 10) {
+                            currentSegment.push(pathPoints[i]);
+                        } else {
+                            if (currentSegment.length > 1) segments.push(currentSegment);
+                            currentSegment = [pathPoints[i]];
+                        }
+                    }
+                    if (currentSegment.length > 1) segments.push(currentSegment);
+
+                    // Desenhar cada segmento como área preenchida
+                    segments.forEach(seg => {
+                        // Criar gradiente simulado com linhas verticais
+                        for (let i = 0; i < seg.length - 1; i++) {
+                            const p1 = seg[i], p2 = seg[i + 1];
+                            const midX = (p1.x + p2.x) / 2;
+                            const maxY = Math.max(p1.y, p2.y);
+                            const areaHeight = baseY - maxY;
+
+                            // Desenhar faixas verticais com opacidade decrescente
+                            const numStripes = 5;
+                            for (let s = 0; s < numStripes; s++) {
+                                const alpha = 0.3 - (s / numStripes) * 0.25; // Opacidade vai de 0.3 a 0.05
+                                const stripeTop = maxY + (s / numStripes) * areaHeight;
+                                const stripeBottom = maxY + ((s + 1) / numStripes) * areaHeight;
+                                // RGB: vermelho rosado
+                                const r = Math.floor(255 - s * 5);
+                                const g = Math.floor(200 + s * 10);
+                                const b = Math.floor(200 + s * 10);
+                                doc.setFillColor(r, g, b);
+                                doc.rect(p1.x, stripeTop, p2.x - p1.x, stripeBottom - stripeTop, 'F');
+                            }
+                        }
+                    });
+
+                    // Linha principal de FC (sobre o preenchimento)
                     doc.setDrawColor(220, 53, 69); doc.setLineWidth(0.8);
                     for (let i = 1; i < pathPoints.length; i++) {
                         const p1 = pathPoints[i - 1], p2 = pathPoints[i];
@@ -1663,7 +1702,7 @@
                                 recordedData = sess.data || [];
                                 recordedMarkers = sess.markers || [];
                                 allElements.participantIdInput.value = sess.participant || '';
-                                allElements.conditionSelect.value = sess.condition || 'Repouso';
+                                // Campo condição foi removido
                                 hasUnsavedData = true;
                                 displayReview();
                                 alert('Sessão recuperada! Por favor, exporte para arquivo assim que possível.');
