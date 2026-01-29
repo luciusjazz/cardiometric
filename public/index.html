@@ -716,6 +716,14 @@
                 if (hrTrendChart) hrTrendChart.destroy();
                 const hrData = extractHrTrendData();
                 if (hrData.length > 0 && allElements.hrTrendChartCanvas) {
+                    // Calcular escala Y dinâmica baseada nos dados
+                    const hrValues = hrData.map(d => d.hr);
+                    const hrMin = Math.min(...hrValues);
+                    const hrMax = Math.max(...hrValues);
+                    const hrPadding = Math.max(5, (hrMax - hrMin) * 0.15);
+                    const yMin = Math.max(30, hrMin - hrPadding);
+                    const yMax = Math.min(220, hrMax + hrPadding);
+
                     hrTrendChart = new Chart(allElements.hrTrendChartCanvas.getContext('2d'), {
                         type: 'line',
                         data: {
@@ -735,10 +743,29 @@
                             maintainAspectRatio: false,
                             animation: false,
                             scales: {
-                                x: { title: { display: true, text: 'Tempo (s)' }, ticks: { autoSkip: true, maxTicksLimit: 10 } },
-                                y: { title: { display: true, text: 'FC (bpm)' }, suggestedMin: 40, suggestedMax: 180 }
+                                x: {
+                                    title: { display: true, text: 'Tempo (s)' },
+                                    ticks: { autoSkip: true, maxTicksLimit: 10 }
+                                },
+                                y: {
+                                    title: { display: true, text: 'FC (bpm)' },
+                                    min: yMin,
+                                    max: yMax
+                                }
                             },
-                            plugins: { legend: { display: false } }
+                            plugins: {
+                                legend: { display: false },
+                                zoom: {
+                                    pan: { enabled: true, mode: 'x', onPanComplete: () => { syncHrChartFromEcg(); } },
+                                    zoom: {
+                                        wheel: { enabled: true },
+                                        pinch: { enabled: true },
+                                        drag: { enabled: true, modifierKey: null },
+                                        mode: 'x',
+                                        onZoomComplete: () => { syncHrChartFromEcg(); }
+                                    }
+                                }
+                            }
                         }
                     });
                 }
@@ -814,6 +841,35 @@
                     allElements.reviewScrollBar.value = String(minIdx);
                     allElements.reviewScrollBar.dataset.window = String(windowSize);
                 }
+                // Sincronizar gráfico de FC
+                syncHrChartFromEcg();
+            }
+
+            // Sincroniza o gráfico de FC com a janela do ECG
+            function syncHrChartFromEcg() {
+                if (!hrTrendChart || !reviewChart) return;
+                const ecgLabels = reviewChart.data.labels;
+                const hrLabels = hrTrendChart.data.labels;
+                if (!ecgLabels.length || !hrLabels.length) return;
+
+                // Obter janela de tempo do ECG
+                const { minIdx, maxIdx } = getReviewWindow();
+                const startTime = Number(ecgLabels[minIdx]);
+                const endTime = Number(ecgLabels[maxIdx]);
+
+                // Encontrar índices correspondentes no gráfico de FC
+                let hrMinIdx = 0, hrMaxIdx = hrLabels.length - 1;
+                for (let i = 0; i < hrLabels.length; i++) {
+                    if (Number(hrLabels[i]) >= startTime) { hrMinIdx = i; break; }
+                }
+                for (let i = hrLabels.length - 1; i >= 0; i--) {
+                    if (Number(hrLabels[i]) <= endTime) { hrMaxIdx = i; break; }
+                }
+
+                // Aplicar mesma janela ao gráfico de FC
+                hrTrendChart.options.scales.x.min = hrMinIdx;
+                hrTrendChart.options.scales.x.max = hrMaxIdx;
+                hrTrendChart.update('none');
             }
             if (allElements.reviewScrollBar) {
                 allElements.reviewScrollBar.addEventListener('input', (e) => {
