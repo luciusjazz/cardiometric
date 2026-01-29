@@ -874,6 +874,8 @@
                 }
                 // Sincronizar gráfico de FC
                 syncHrChartFromEcg();
+                // Atualizar lista de marcadores visíveis
+                renderMarkersList();
             }
 
             // Sincroniza o gráfico de FC com a janela do ECG
@@ -1244,7 +1246,12 @@
                 const markersSorted = (recordedMarkers || []).slice().sort((a, b) => a.time - b.time);
                 const rowsPerIndexPage = 40;
                 const indexPages = markersSorted.length > 0 ? Math.ceil(markersSorted.length / rowsPerIndexPage) : 0;
-                const totalPagesCombined = indexPages + stripPages;
+
+                // Página de FC (1 página se houver dados de FC)
+                const hrData = extractHrTrendData();
+                const hasHrPage = hrData.length > 1;
+
+                const totalPagesCombined = indexPages + (hasHrPage ? 1 : 0) + stripPages;
                 let pageCounter = 1;
 
                 if (indexPages > 0) {
@@ -1268,6 +1275,92 @@
                         doc.setTextColor(0);
                         pageCounter++;
                     }
+                }
+
+                // Página de Tendência de FC
+                if (hasHrPage) {
+                    if (pageCounter > 1) doc.addPage();
+                    doc.setFontSize(12); doc.text('Tendência de Frequência Cardíaca', pageWidth / 2, margin, { align: 'center' });
+                    doc.setFontSize(8);
+                    doc.text(`ID do Participante: ${pId} | Condição: ${cond}`, margin, margin + 10);
+                    doc.text(`Data: ${new Date().toLocaleString()} | FC Média: ${avgHrVal}bpm | FC Pico: ${peakHrVal}bpm | FC Mín: ${minHrVal}bpm`, margin, margin + 15);
+                    doc.text(`Página ${pageCounter} de ${totalPagesCombined}`, pageWidth - margin, pageHeight - 5, { align: 'right' });
+
+                    // Área do gráfico
+                    const chartLeft = margin;
+                    const chartTop = margin + 25;
+                    const chartW = pageWidth - 2 * margin;
+                    const chartH = pageHeight - chartTop - 25;
+
+                    // Grid do gráfico
+                    doc.setDrawColor(230, 230, 230); doc.setLineWidth(0.1);
+                    for (let gy = 0; gy <= 10; gy++) {
+                        const yLine = chartTop + (gy / 10) * chartH;
+                        doc.line(chartLeft, yLine, chartLeft + chartW, yLine);
+                    }
+                    for (let gx = 0; gx <= 10; gx++) {
+                        const xLine = chartLeft + (gx / 10) * chartW;
+                        doc.line(xLine, chartTop, xLine, chartTop + chartH);
+                    }
+
+                    // Escalas
+                    const hrValues = hrData.map(d => d.hr);
+                    const hrMin = Math.min(...hrValues);
+                    const hrMax = Math.max(...hrValues);
+                    const hrRange = Math.max(hrMax - hrMin, 10);
+                    const hrPadding = hrRange * 0.1;
+                    const hrYMin = hrMin - hrPadding;
+                    const hrYMax = hrMax + hrPadding;
+
+                    const timeMin = hrData[0].time;
+                    const timeMax = hrData[hrData.length - 1].time;
+                    const timeRange = timeMax - timeMin;
+
+                    // Labels de eixo Y (FC)
+                    doc.setFontSize(7); doc.setTextColor(60);
+                    for (let i = 0; i <= 5; i++) {
+                        const hrVal = hrYMin + (hrYMax - hrYMin) * (5 - i) / 5;
+                        const yPos = chartTop + (i / 5) * chartH;
+                        doc.text(`${Math.round(hrVal)} bpm`, chartLeft - 2, yPos + 2, { align: 'right' });
+                    }
+
+                    // Labels de eixo X (Tempo)
+                    for (let i = 0; i <= 5; i++) {
+                        const timeVal = timeMin + (timeRange * i / 5);
+                        const xPos = chartLeft + (i / 5) * chartW;
+                        doc.text(`${timeVal.toFixed(0)}s`, xPos, chartTop + chartH + 5, { align: 'center' });
+                    }
+
+                    // Desenhar linha de FC
+                    doc.setDrawColor(220, 53, 69); doc.setLineWidth(0.5);
+                    for (let i = 1; i < hrData.length; i++) {
+                        const p1 = hrData[i - 1], p2 = hrData[i];
+                        const x1 = chartLeft + ((p1.time - timeMin) / timeRange) * chartW;
+                        const y1 = chartTop + ((hrYMax - p1.hr) / (hrYMax - hrYMin)) * chartH;
+                        const x2 = chartLeft + ((p2.time - timeMin) / timeRange) * chartW;
+                        const y2 = chartTop + ((hrYMax - p2.hr) / (hrYMax - hrYMin)) * chartH;
+                        // Evita gaps grandes
+                        if (p2.time - p1.time < 10) {
+                            doc.line(x1, y1, x2, y2);
+                        }
+                    }
+
+                    // Marcadores no gráfico de FC
+                    if (markersSorted.length > 0) {
+                        doc.setDrawColor(255, 0, 0); doc.setLineWidth(0.3);
+                        doc.setFontSize(6); doc.setTextColor(200, 0, 0);
+                        markersSorted.forEach(m => {
+                            if (m.time >= timeMin && m.time <= timeMax) {
+                                const mx = chartLeft + ((m.time - timeMin) / timeRange) * chartW;
+                                doc.line(mx, chartTop, mx, chartTop + chartH);
+                                const txt = (m.label || 'M').slice(0, 10);
+                                doc.text(txt, mx + 1, chartTop + 5);
+                            }
+                        });
+                    }
+
+                    doc.setTextColor(0);
+                    pageCounter++;
                 }
                 for (let p = 0; p < stripPages; p++) {
                     if (pageCounter > 1 || p > 0) doc.addPage();
