@@ -441,7 +441,7 @@
             <div class="text-lg opacity-80 mb-4">Gravação em andamento</div>
             <div id="lock-posture-indicator" class="text-xl mb-4">📍 --</div>
             <div id="lock-timer" class="text-4xl font-mono mb-6">00:00</div>
-            <div class="text-sm opacity-60">Toque 3x rapidamente para desbloquear</div>
+            <div class="text-sm opacity-60">Toque 2x para desbloquear</div>
             <div id="tap-feedback" class="text-2xl mt-4 opacity-0 transition-opacity">👆</div>
         </div>
     </div>
@@ -1083,31 +1083,39 @@
                 return `${min}:${sec}`;
             }
 
-            // Listener para 3 toques rápidos no overlay
+            // Listener para desbloqueio com 2 toques rápidos
             if (allElements.screenLockOverlay) {
-                allElements.screenLockOverlay.addEventListener('click', (e) => {
+                function handleUnlockTap(e) {
                     e.preventDefault();
                     e.stopPropagation();
 
                     lockTapCount++;
+                    console.log(`🔓 Toque ${lockTapCount}/2 para desbloquear`);
 
                     // Feedback visual
                     allElements.tapFeedback.style.opacity = '1';
                     allElements.tapFeedback.textContent = '👆'.repeat(lockTapCount);
-                    setTimeout(() => { allElements.tapFeedback.style.opacity = '0'; }, 300);
+                    setTimeout(() => { allElements.tapFeedback.style.opacity = '0.3'; }, 200);
 
-                    // Reset timeout
+                    // Reset timeout após 1.5 segundos sem toques
                     if (lockTapTimeout) clearTimeout(lockTapTimeout);
-                    lockTapTimeout = setTimeout(() => { lockTapCount = 0; }, 800);
+                    lockTapTimeout = setTimeout(() => {
+                        lockTapCount = 0;
+                        allElements.tapFeedback.textContent = '';
+                    }, 1500);
 
-                    // Desbloquear com 3 toques
-                    if (lockTapCount >= 3) {
+                    // Desbloquear com 2 toques
+                    if (lockTapCount >= 2) {
                         unlockScreen();
                     }
-                });
+                }
 
-                // Prevenir outros eventos de toque
-                allElements.screenLockOverlay.addEventListener('touchstart', (e) => e.preventDefault());
+                // Usar touchend para mobile (mais responsivo)
+                allElements.screenLockOverlay.addEventListener('touchend', handleUnlockTap);
+                // Fallback para desktop
+                allElements.screenLockOverlay.addEventListener('click', handleUnlockTap);
+
+                // Prevenir scroll mas não bloquear toques
                 allElements.screenLockOverlay.addEventListener('touchmove', (e) => e.preventDefault());
             }
 
