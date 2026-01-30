@@ -1356,7 +1356,29 @@
                 const avgHrVal = allElements.avgHrValue.textContent; const peakHrVal = allElements.peakHrValue.textContent; const minHrVal = allElements.minHrValue.textContent;
                 const timePerStrip = 8; const stripsPerPage = 4; // 25 mm/s padrão
                 // Ordena por tempo e agrupa por delta de tempo ~1/SR
-                const cleaned = dataToExport.filter(d => Number.isFinite(d.time) && Number.isFinite(d.signal)).sort((a, b) => a.time - b.time);
+                const sorted = dataToExport.filter(d => Number.isFinite(d.time) && Number.isFinite(d.signal)).sort((a, b) => a.time - b.time);
+                // Remove pontos com timestamps muito próximos ou com saltos grandes (dados comprimidos por pausa na coleta)
+                const expectedDt = 1 / SAMPLE_RATE_HZ; // ~7.7ms para 130Hz
+                const cleaned = [];
+                for (let i = 0; i < sorted.length; i++) {
+                    const curr = sorted[i];
+                    const prev = cleaned[cleaned.length - 1];
+                    if (!prev) {
+                        cleaned.push(curr);
+                        continue;
+                    }
+                    const dt = curr.time - prev.time;
+                    // Ignora pontos muito próximos (< 50% do esperado) - dados comprimidos
+                    // Ignora pontos com gap muito grande (> 5x esperado) - perda de sinal
+                    if (dt >= expectedDt * 0.5 && dt <= expectedDt * 5) {
+                        cleaned.push(curr);
+                    }
+                    // Se o gap é grande mas razoável (até 1 segundo), inclui com marcação
+                    else if (dt > expectedDt * 5 && dt <= 1.0) {
+                        cleaned.push(curr);
+                    }
+                    // Gaps maiores que 1 segundo: ignora (evita conectar linhas distantes)
+                }
                 if (cleaned.length < 2) { alert('Pouco dado para gerar PDF.'); return; }
                 const totalDuration = cleaned[cleaned.length - 1].time - cleaned[0].time;
                 const totalStrips = Math.ceil(totalDuration / timePerStrip);
