@@ -189,6 +189,11 @@
                         class="hidden items-center justify-center px-3 py-2 rounded-full bg-gray-100 text-gray-700 font-semibold text-sm">
                         🔋 <span id="battery-value">--</span>%
                     </div>
+                    <div id="posture-display"
+                        class="hidden items-center justify-center px-3 py-2 rounded-full bg-purple-100 text-purple-800 font-semibold text-sm">
+                        <span id="posture-icon">📍</span> <span id="posture-value">--</span>
+                        <span id="posture-source" class="ml-1 text-xs opacity-70"></span>
+                    </div>
                 </div>
             </div>
             <div class="flex flex-col md:flex-row items-stretch justify-between mb-4 gap-3">
@@ -437,6 +442,8 @@
             const allElements = {
                 statusDisplay: document.getElementById('status-display'), hrDisplay: document.getElementById('hr-display'), hrValue: document.getElementById('hr-value'),
                 batteryDisplay: document.getElementById('battery-display'), batteryValue: document.getElementById('battery-value'),
+                postureDisplay: document.getElementById('posture-display'), postureIcon: document.getElementById('posture-icon'),
+                postureValue: document.getElementById('posture-value'), postureSource: document.getElementById('posture-source'),
                 connectButton: document.getElementById('connectButton'), recordButton: document.getElementById('recordButton'),
                 freezeButton: document.getElementById('freezeButton'),
                 metricsPanel: document.getElementById('metrics-panel'), curHrValue: document.getElementById('cur-hr-value'), avgHrValue: document.getElementById('avg-hr-value'),
@@ -812,6 +819,7 @@
                         });
 
                         currentPosture = detectedPosture;
+                        updatePostureDisplay(detectedPosture, 'Polar');
                         console.log(`📍 Postura (Polar H10): ${label} @ ${recordTime.toFixed(1)}s`);
                     }
 
@@ -968,6 +976,37 @@
                 }
             }
 
+            // Icons para cada posição
+            const POSTURE_ICONS = {
+                'deitado': '🛏️',
+                'sentado': '🪑',
+                'em_pe': '🧍',
+                'caminhando': '🚶',
+                'exercicio': '🏃'
+            };
+
+            function updatePostureDisplay(posture, source = '') {
+                if (!allElements.postureDisplay || !allElements.postureValue) return;
+
+                if (!posture) {
+                    allElements.postureDisplay.classList.add('hidden');
+                    allElements.postureDisplay.classList.remove('flex');
+                    return;
+                }
+
+                allElements.postureDisplay.classList.remove('hidden');
+                allElements.postureDisplay.classList.add('flex');
+
+                const label = POSTURE_LABELS[posture] || posture;
+                const icon = POSTURE_ICONS[posture] || '📍';
+
+                allElements.postureIcon.textContent = icon;
+                allElements.postureValue.textContent = label;
+                allElements.postureSource.textContent = source ? `(${source})` : '';
+
+                console.log(`📍 UI atualizada: ${label} ${source}`);
+            }
+
             function startTimer() {
                 let seconds = 0;
                 allElements.timerValue.textContent = "00:00";
@@ -1087,6 +1126,11 @@
                 const label = POSTURE_LABELS[posture] || posture;
                 recordedMarkers.push({ time: 0, label: `📍 ${label} (início)` });
 
+                // Definir posição inicial e atualizar indicador
+                currentPosture = posture;
+                postureHistory = [{ posture: posture, startTime: 0 }];
+                updatePostureDisplay(posture, 'manual');
+
                 // Iniciar detecção de postura via acelerômetro
                 startPostureDetection();
             }
@@ -1097,6 +1141,10 @@
                 allElements.recordButton.classList.toggle('btn-record-active', false);
 
                 stopPostureDetection();
+
+                // Esconder indicador de posição
+                updatePostureDisplay(null);
+                currentPosture = null;
 
                 // Finalizar último período de postura
                 if (postureHistory.length > 0) {
