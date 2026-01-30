@@ -620,17 +620,52 @@
                     await dataCharacteristic.startNotifications();
                     dataCharacteristic.addEventListener('characteristicvaluechanged', handlePMDData);
 
+                    // Listener para respostas do control
+                    await controlCharacteristic.startNotifications();
+                    controlCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+                        const bytes = new Uint8Array(event.target.value.buffer);
+                        console.log('📟 PMD Control response:', Array.from(bytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+                        // Response format: [response_type, measurement_type, error_code, ...]
+                        if (bytes[0] === 0xF0) { // Features query response
+                            console.log('📟 Features suportadas pelo dispositivo');
+                        } else if (bytes[0] === 0x02) { // Start streaming response
+                            const measurementType = bytes[1];
+                            const errorCode = bytes[2];
+                            const types = { 0x00: 'ECG', 0x02: 'ACC', 0x05: 'PPG' };
+                            if (errorCode === 0x00) {
+                                console.log(`✅ ${types[measurementType] || measurementType} streaming confirmado!`);
+                            } else {
+                                console.warn(`❌ ${types[measurementType] || measurementType} falhou, erro: ${errorCode}`);
+                            }
+                        }
+                    });
+
                     // Comando para iniciar ECG: tipo=0x00, sample_rate=130Hz
                     const startEcgCommand = new Uint8Array([0x02, 0x00, 0x00, 0x01, 0x82, 0x00, 0x01, 0x01, 0x0E, 0x00]);
                     await controlCharacteristic.writeValue(startEcgCommand);
-                    console.log('📊 ECG streaming iniciado');
+                    console.log('📊 ECG streaming solicitado...');
 
-                    // Comando para iniciar ACC: tipo=0x02, sample_rate=25Hz, range=8G
-                    // Formato: 0x02 (start), 0x02 (ACC), 0x00, settings...
+                    // Aguardar um pouco antes de iniciar ACC
+                    await new Promise(resolve => setTimeout(resolve, 500));
+
+                    // Comando para iniciar ACC: tipo=0x02, sample_rate=25Hz (0x19=25), range=8G (0x08)
+                    // Formato PMD: 0x02 (start), type, param_count, [sample_rate param], [range param]
+                    // Setting 0x00 = sample_rate, 0x02 = range
                     try {
-                        const startAccCommand = new Uint8Array([0x02, 0x02, 0x00, 0x01, 0x34, 0x00, 0x01, 0x01, 0x10, 0x00]);
+                        // Formato corrigido: [start=0x02][type=0x02][param_count=0x02][setting_type][array_len][value...][setting_type][array_len][value...]
+                        const startAccCommand = new Uint8Array([
+                            0x02,       // Start measurement
+                            0x02,       // ACC type
+                            0x02,       // Number of settings
+                            0x00,       // Setting type: sample rate
+                            0x01,       // Array length: 1
+                            0x19,       // Value: 25 Hz
+                            0x02,       // Setting type: range
+                            0x01,       // Array length: 1
+                            0x08        // Value: 8G
+                        ]);
                         await controlCharacteristic.writeValue(startAccCommand);
-                        console.log('🏃 Acelerômetro Polar H10 streaming iniciado (25Hz)');
+                        console.log('🏃 Acelerômetro Polar H10 solicitado (25Hz, 8G)...');
                     } catch (accErr) {
                         console.warn('⚠️ Acelerômetro não iniciado:', accErr.message);
                     }
@@ -681,6 +716,7 @@
             }
 
             // Handler unificado para dados PMD (ECG e ACC)
+            let accDataReceived = false;
             function handlePMDData(event) {
                 const value = event.target.value;
                 const bytes = new Uint8Array(value.buffer);
@@ -693,7 +729,13 @@
                     handleECGData(bytes);
                 } else if (dataType === 0x02) {
                     // Accelerometer data
+                    if (!accDataReceived) {
+                        console.log('🏃 Primeiro pacote ACC recebido! Bytes:', bytes.length);
+                        accDataReceived = true;
+                    }
                     handleACCData(bytes);
+                } else {
+                    console.log('📦 Tipo PMD desconhecido:', dataType, 'bytes:', bytes.length);
                 }
             }
 
@@ -702,11 +744,21 @@
             const POLAR_ACC_BUFFER_SIZE = 25; // 1 segundo a 25Hz
 
             function handleACCData(bytes) {
-                if (!isRecording || !postureDetectionActive) return;
+                // Log para debug - mostrar se dados estão chegando
+                if (polarAccBuffer.length === 0) {
+                    console.log('🏃 handleACCData chamado, isRecording:', isRecording, 'postureActive:', postureDetectionActive);
+                }
 
-                // Formato ACC: tipo(1) + timestamp(8) + samples (cada sample = 6 bytes: X,Y,Z em int16)
-                const sampleSize = 6; // 2 bytes por eixo
-                let offset = 10; // Pular header
+                if (!isRecording || !postureDetectionActive) {
+                    // Log a cada 100 pacotes ignorados
+                    if (Math.random() < 0.01) console.log('⚠️ ACC ignorado: recording=', isRecording, 'posture=', postureDetectionActive);
+                    return;
+                }
+
+                // Formato ACC: tipo(1) + timestamp(8) + frames
+                // Cada frame pode ter resolução variável (16-bit por default)
+                const sampleSize = 6; // 2 bytes por eixo (X, Y, Z)
+                let offset = 10; // Pular: tipo(1) + timestamp(8) + frame_type(1)
 
                 while (offset + sampleSize <= bytes.length) {
                     // Ler valores int16 (little endian)
