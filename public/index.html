@@ -210,6 +210,9 @@
                     <button id="recordButton"
                         class="w-full sm:w-auto bg-gray-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-gray-700 transition-colors shadow-sm"
                         disabled>Iniciar Gravação</button>
+                    <button id="lockScreenButton"
+                        class="hidden w-full sm:w-auto bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
+                        title="Bloquear tela para guardar no bolso">🔒 Bloquear Tela</button>
                     <button id="exportSessionButton"
                         class="w-full sm:w-auto bg-emerald-700 text-white font-bold py-2 px-6 rounded-lg hover:bg-emerald-800 transition-colors shadow-sm"
                         disabled>Exportar Sessão (Arquivo)</button>
@@ -429,6 +432,20 @@
         </div>
     </div>
 
+    <!-- Overlay de Bloqueio de Tela -->
+    <div id="screen-lock-overlay" class="fixed inset-0 bg-black bg-opacity-90 hidden items-center justify-center z-40"
+        style="touch-action: none;">
+        <div class="text-center text-white p-8">
+            <div class="text-6xl mb-4">🔒</div>
+            <div class="text-2xl font-bold mb-2">Tela Bloqueada</div>
+            <div class="text-lg opacity-80 mb-4">Gravação em andamento</div>
+            <div id="lock-posture-indicator" class="text-xl mb-4">📍 --</div>
+            <div id="lock-timer" class="text-4xl font-mono mb-6">00:00</div>
+            <div class="text-sm opacity-60">Toque 3x rapidamente para desbloquear</div>
+            <div id="tap-feedback" class="text-2xl mt-4 opacity-0 transition-opacity">👆</div>
+        </div>
+    </div>
+
     <footer class="bg-white mt-8 py-4">
         <div class="container mx-auto text-center text-sm text-gray-500">
             <p>&copy; 2025-2027 CardioMetric - Projeto de Validação.</p>
@@ -445,6 +462,7 @@
                 postureDisplay: document.getElementById('posture-display'), postureIcon: document.getElementById('posture-icon'),
                 postureValue: document.getElementById('posture-value'), postureSource: document.getElementById('posture-source'),
                 connectButton: document.getElementById('connectButton'), recordButton: document.getElementById('recordButton'),
+                lockScreenButton: document.getElementById('lockScreenButton'),
                 freezeButton: document.getElementById('freezeButton'),
                 metricsPanel: document.getElementById('metrics-panel'), curHrValue: document.getElementById('cur-hr-value'), avgHrValue: document.getElementById('avg-hr-value'),
                 peakHrValue: document.getElementById('peak-hr-value'), minHrValue: document.getElementById('min-hr-value'),
@@ -479,6 +497,10 @@
                 hrTrendChartCanvas: document.getElementById('hrTrendChart'),
                 postureModal: document.getElementById('posture-modal'),
                 postureModalCancel: document.getElementById('posture-modal-cancel'),
+                screenLockOverlay: document.getElementById('screen-lock-overlay'),
+                lockPostureIndicator: document.getElementById('lock-posture-indicator'),
+                lockTimer: document.getElementById('lock-timer'),
+                tapFeedback: document.getElementById('tap-feedback'),
             };
 
             let ecgChart, reviewChart, hrTrendChart, timerInterval, recordedData = [], recordedMarkers = [], liveBuffer = [], frozenBuffer = [], frozenSource = [], isRecording = false, isConnected = false, isFrozen = false, polarDevice, startTime, signalProcessor;
@@ -1004,7 +1026,89 @@
                 allElements.postureValue.textContent = label;
                 allElements.postureSource.textContent = source ? `(${source})` : '';
 
+                // Atualizar também no overlay de bloqueio
+                if (allElements.lockPostureIndicator) {
+                    allElements.lockPostureIndicator.textContent = `${icon} ${label}`;
+                }
+
                 console.log(`📍 UI atualizada: ${label} ${source}`);
+            }
+
+            // Sistema de bloqueio de tela
+            let isScreenLocked = false;
+            let lockTapCount = 0;
+            let lockTapTimeout = null;
+            let lockTimerInterval = null;
+
+            function lockScreen() {
+                if (!isRecording) return;
+                isScreenLocked = true;
+                allElements.screenLockOverlay.classList.remove('hidden');
+                allElements.screenLockOverlay.classList.add('flex');
+
+                // Atualizar posição atual no overlay
+                if (currentPosture) {
+                    const icon = POSTURE_ICONS[currentPosture] || '📍';
+                    const label = POSTURE_LABELS[currentPosture] || currentPosture;
+                    allElements.lockPostureIndicator.textContent = `${icon} ${label}`;
+                }
+
+                // Timer sincronizado
+                let lockSeconds = Math.floor((Date.now() - recordingStartTime) / 1000);
+                allElements.lockTimer.textContent = formatTime(lockSeconds);
+
+                lockTimerInterval = setInterval(() => {
+                    lockSeconds++;
+                    allElements.lockTimer.textContent = formatTime(lockSeconds);
+                }, 1000);
+
+                console.log('🔒 Tela bloqueada');
+            }
+
+            function unlockScreen() {
+                isScreenLocked = false;
+                allElements.screenLockOverlay.classList.add('hidden');
+                allElements.screenLockOverlay.classList.remove('flex');
+                lockTapCount = 0;
+                if (lockTimerInterval) {
+                    clearInterval(lockTimerInterval);
+                    lockTimerInterval = null;
+                }
+                console.log('🔓 Tela desbloqueada');
+            }
+
+            function formatTime(seconds) {
+                const min = Math.floor(seconds / 60).toString().padStart(2, '0');
+                const sec = (seconds % 60).toString().padStart(2, '0');
+                return `${min}:${sec}`;
+            }
+
+            // Listener para 3 toques rápidos no overlay
+            if (allElements.screenLockOverlay) {
+                allElements.screenLockOverlay.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    lockTapCount++;
+
+                    // Feedback visual
+                    allElements.tapFeedback.style.opacity = '1';
+                    allElements.tapFeedback.textContent = '👆'.repeat(lockTapCount);
+                    setTimeout(() => { allElements.tapFeedback.style.opacity = '0'; }, 300);
+
+                    // Reset timeout
+                    if (lockTapTimeout) clearTimeout(lockTapTimeout);
+                    lockTapTimeout = setTimeout(() => { lockTapCount = 0; }, 800);
+
+                    // Desbloquear com 3 toques
+                    if (lockTapCount >= 3) {
+                        unlockScreen();
+                    }
+                });
+
+                // Prevenir outros eventos de toque
+                allElements.screenLockOverlay.addEventListener('touchstart', (e) => e.preventDefault());
+                allElements.screenLockOverlay.addEventListener('touchmove', (e) => e.preventDefault());
             }
 
             function startTimer() {
@@ -1104,6 +1208,11 @@
             // Cancelar modal
             allElements.postureModalCancel.addEventListener('click', hidePostureModal);
 
+            // Listener para botão de bloqueio de tela
+            if (allElements.lockScreenButton) {
+                allElements.lockScreenButton.addEventListener('click', lockScreen);
+            }
+
             async function startRecordingWithPosture(posture) {
                 isRecording = true;
                 allElements.recordButton.textContent = 'Parar Gravação';
@@ -1121,6 +1230,11 @@
                 setSaveButtonsState();
                 await requestWakeLock();
                 startAutoSave();
+
+                // Mostrar botão de bloqueio de tela
+                if (allElements.lockScreenButton) {
+                    allElements.lockScreenButton.classList.remove('hidden');
+                }
 
                 // Adicionar marcador de posição inicial
                 const label = POSTURE_LABELS[posture] || posture;
@@ -1159,6 +1273,14 @@
                 clearInterval(timerInterval);
                 if (recordedData.length > 0) displayReview();
                 setSaveButtonsState();
+
+                // Esconder botão de bloqueio e desbloquear se necessário
+                if (allElements.lockScreenButton) {
+                    allElements.lockScreenButton.classList.add('hidden');
+                }
+                if (isScreenLocked) {
+                    unlockScreen();
+                }
             }
 
             // Detecção de postura - usa acelerômetro do Polar H10 como primário, celular como fallback
