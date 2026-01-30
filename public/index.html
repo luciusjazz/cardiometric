@@ -191,13 +191,12 @@
                     </div>
                 </div>
             </div>
-            <div class="flex flex-col md:flex-row items-center justify-between mb-4 gap-3">
-                <div id="marker-section" class="hidden w-full md:w-auto flex items-center gap-2">
-                    <input type="text" id="markerInput" class="border-gray-300 rounded-md shadow-sm"
+            <div class="flex flex-col md:flex-row items-stretch justify-between mb-4 gap-3">
+                <div id="marker-section" class="hidden w-full flex flex-row items-center gap-2">
+                    <input type="text" id="markerInput" class="flex-1 border-gray-300 rounded-md shadow-sm py-2 px-3"
                         placeholder="Descrição do marcador...">
                     <button id="addMarkerButton"
-                        class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600">Adicionar
-                        Marcador</button>
+                        class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600 whitespace-nowrap">Adicionar</button>
                 </div>
                 <div class="w-full md:w-auto flex flex-col sm:flex-row gap-3">
                     <button id="connectButton"
@@ -535,10 +534,12 @@
                     signalProcessor = new SignalProcessor(SAMPLE_RATE_HZ);
                     // Ler bateria
                     try {
+                        console.log('🔋 Tentando ler bateria...');
                         const batteryService = await server.getPrimaryService(BATTERY_SERVICE_UUID);
                         const batteryCharacteristic = await batteryService.getCharacteristic(BATTERY_LEVEL_CHARACTERISTIC_UUID);
                         const batteryValue = await batteryCharacteristic.readValue();
                         const batteryLevel = batteryValue.getUint8(0);
+                        console.log('🔋 Bateria lida com sucesso:', batteryLevel, '%');
                         updateBatteryDisplay(batteryLevel);
                         // Atualizar bateria a cada 60 segundos
                         setInterval(async () => {
@@ -549,7 +550,10 @@
                                 }
                             } catch (e) { console.warn('Erro ao atualizar bateria:', e); }
                         }, 60000);
-                    } catch (battError) { console.warn("Serviço de bateria não encontrado.", battError); }
+                    } catch (battError) {
+                        console.warn("⚠️ Serviço de bateria não disponível neste dispositivo:", battError.message);
+                        // Bateria não disponível - não mostrar nada
+                    }
                     try {
                         const hrService = await server.getPrimaryService(HEART_RATE_SERVICE_UUID);
                         const hrCharacteristic = await hrService.getCharacteristic(HEART_RATE_CHARACTERISTIC_UUID);
@@ -855,7 +859,7 @@
                             { label: 'Registo Completo (µV)', data: data, borderColor: 'rgb(75, 192, 192)', borderWidth: 1, pointRadius: 0 }
                         ]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { title: { text: 'Tempo (s)' }, ticks: { autoSkip: true, maxTicksLimit: 8, callback: function (value) { const labels = this.chart?.data?.labels || []; const lbl = labels[Math.round(value)] ?? value; const n = Number(lbl); return Number.isFinite(n) ? Math.round(n) + 's' : lbl; } } } }, plugins: { annotation: { annotations: buildMarkerAnnotations(labels) }, zoom: { pan: { enabled: true, mode: 'x', threshold: 20, onPanComplete: () => { updateReviewNavFromChart(); } }, zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'x', onZoomComplete: () => { updateReviewNavFromChart(); } } }, tooltip: { callbacks: { label: function (ctx) { const y = ctx.parsed.y; return `ECG: ${Math.round(y)} µV @ ${Number(ctx.label).toFixed(2)} s`; } } } } }
+                    options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { title: { text: 'Tempo (s)' }, ticks: { autoSkip: true, maxTicksLimit: 8, callback: function (value) { const labels = this.chart?.data?.labels || []; const lbl = labels[Math.round(value)] ?? value; const n = Number(lbl); return Number.isFinite(n) ? Math.round(n) + 's' : lbl; } }, min: 0, max: labels.length - 1 } }, plugins: { annotation: { annotations: buildMarkerAnnotations(labels) }, zoom: { limits: { x: { min: 0, max: labels.length - 1, minRange: 100 } }, pan: { enabled: true, mode: 'x', threshold: 10, onPanComplete: () => { updateReviewNavFromChart(); } }, zoom: { wheel: { enabled: true, speed: 0.05 }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'x', onZoomComplete: () => { updateReviewNavFromChart(); } } }, tooltip: { callbacks: { label: function (ctx) { const y = ctx.parsed.y; return `ECG: ${Math.round(y)} µV @ ${Number(ctx.label).toFixed(2)} s`; } } } } }
                 });
                 // Atualiza filtros de revisão e aplica imediatamente
                 updateReviewFilterInputs();
