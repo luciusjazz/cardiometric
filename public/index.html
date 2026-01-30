@@ -427,6 +427,20 @@
                     <span class="font-semibold text-gray-700">Exercício</span>
                 </button>
             </div>
+
+            <!-- Toggle para detecção automática -->
+            <div class="mt-4 p-3 bg-gray-50 rounded-lg">
+                <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" id="auto-posture-toggle"
+                        class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" checked>
+                    <div>
+                        <span class="font-medium text-gray-700 text-sm">Detectar mudanças automaticamente</span>
+                        <p class="text-xs text-gray-500">Usa o acelerômetro do celular. Desative se o celular ficar com
+                            o pesquisador.</p>
+                    </div>
+                </label>
+            </div>
+
             <button id="posture-modal-cancel"
                 class="mt-4 w-full py-2 text-gray-500 hover:text-gray-700 text-sm">Cancelar</button>
         </div>
@@ -497,6 +511,7 @@
                 hrTrendChartCanvas: document.getElementById('hrTrendChart'),
                 postureModal: document.getElementById('posture-modal'),
                 postureModalCancel: document.getElementById('posture-modal-cancel'),
+                autoPostureToggle: document.getElementById('auto-posture-toggle'),
                 screenLockOverlay: document.getElementById('screen-lock-overlay'),
                 lockPostureIndicator: document.getElementById('lock-posture-indicator'),
                 lockTimer: document.getElementById('lock-timer'),
@@ -1253,8 +1268,18 @@
                 postureHistory = [{ posture: posture, startTime: 0 }];
                 updatePostureDisplay(posture, 'manual');
 
-                // Iniciar detecção de postura via acelerômetro
-                startPostureDetection();
+                // Iniciar detecção de postura via acelerômetro apenas se toggle estiver ativado
+                const autoDetect = allElements.autoPostureToggle ? allElements.autoPostureToggle.checked : true;
+                if (autoDetect) {
+                    startPostureDetection();
+                    console.log('📱 Detecção automática de postura ATIVADA');
+                } else {
+                    console.log('📱 Detecção automática de postura DESATIVADA (modo pesquisa)');
+                    // Esconder botão de bloqueio se não está detectando (celular fica com pesquisador)
+                    if (allElements.lockScreenButton) {
+                        allElements.lockScreenButton.classList.add('hidden');
+                    }
+                }
             }
 
             async function stopRecording() {
