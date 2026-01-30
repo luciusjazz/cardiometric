@@ -618,9 +618,23 @@
                     const controlCharacteristic = await pmdService.getCharacteristic(POLAR_PMD_CONTROL_UUID);
                     const dataCharacteristic = await pmdService.getCharacteristic(POLAR_PMD_DATA_UUID);
                     await dataCharacteristic.startNotifications();
-                    dataCharacteristic.addEventListener('characteristicvaluechanged', handleECGData);
+                    dataCharacteristic.addEventListener('characteristicvaluechanged', handlePMDData);
+
+                    // Comando para iniciar ECG: tipo=0x00, sample_rate=130Hz
                     const startEcgCommand = new Uint8Array([0x02, 0x00, 0x00, 0x01, 0x82, 0x00, 0x01, 0x01, 0x0E, 0x00]);
                     await controlCharacteristic.writeValue(startEcgCommand);
+                    console.log('📊 ECG streaming iniciado');
+
+                    // Comando para iniciar ACC: tipo=0x02, sample_rate=25Hz, range=8G
+                    // Formato: 0x02 (start), 0x02 (ACC), 0x00, settings...
+                    try {
+                        const startAccCommand = new Uint8Array([0x02, 0x02, 0x00, 0x01, 0x34, 0x00, 0x01, 0x01, 0x10, 0x00]);
+                        await controlCharacteristic.writeValue(startAccCommand);
+                        console.log('🏃 Acelerômetro Polar H10 streaming iniciado (25Hz)');
+                    } catch (accErr) {
+                        console.warn('⚠️ Acelerômetro não iniciado:', accErr.message);
+                    }
+
                     startTime = Date.now();
                     updateConnectionStatus(true, polarDevice.name);
                 } catch (error) {
@@ -666,9 +680,160 @@
                 lastRr = rrIntervals;
             }
 
-            function handleECGData(event) {
+            // Handler unificado para dados PMD (ECG e ACC)
+            function handlePMDData(event) {
                 const value = event.target.value;
                 const bytes = new Uint8Array(value.buffer);
+
+                // Primeiro byte indica o tipo de dado
+                const dataType = bytes[0];
+
+                if (dataType === 0x00) {
+                    // ECG data
+                    handleECGData(bytes);
+                } else if (dataType === 0x02) {
+                    // Accelerometer data
+                    handleACCData(bytes);
+                }
+            }
+
+            // Handler para dados de acelerômetro do Polar H10
+            let polarAccBuffer = [];
+            const POLAR_ACC_BUFFER_SIZE = 25; // 1 segundo a 25Hz
+
+            function handleACCData(bytes) {
+                if (!isRecording || !postureDetectionActive) return;
+
+                // Formato ACC: tipo(1) + timestamp(8) + samples (cada sample = 6 bytes: X,Y,Z em int16)
+                const sampleSize = 6; // 2 bytes por eixo
+                let offset = 10; // Pular header
+
+                while (offset + sampleSize <= bytes.length) {
+                    // Ler valores int16 (little endian)
+                    const x = (bytes[offset] | (bytes[offset + 1] << 8));
+                    const y = (bytes[offset + 2] | (bytes[offset + 3] << 8));
+                    const z = (bytes[offset + 4] | (bytes[offset + 5] << 8));
+
+                    // Converter para signed int16
+                    const accX = x > 32767 ? x - 65536 : x;
+                    const accY = y > 32767 ? y - 65536 : y;
+                    const accZ = z > 32767 ? z - 65536 : z;
+
+                    // Converter para mg (milligravity) - escala 8G = 4096 counts/g
+                    const scale = 1000 / 4096; // mg por count
+                    polarAccBuffer.push({
+                        x: accX * scale,
+                        y: accY * scale,
+                        z: accZ * scale,
+                        t: Date.now()
+                    });
+
+                    offset += sampleSize;
+                }
+
+                // Manter buffer limitado
+                while (polarAccBuffer.length > POLAR_ACC_BUFFER_SIZE) {
+                    polarAccBuffer.shift();
+                }
+
+                // Analisar postura a cada segundo
+                const now = Date.now();
+                if (polarAccBuffer.length >= POLAR_ACC_BUFFER_SIZE && now - lastAccelData.timestamp > 1000) {
+                    const detectedPosture = analyzePostureFromPolar(polarAccBuffer);
+
+                    if (detectedPosture && detectedPosture !== currentPosture) {
+                        const recordTime = (now - recordingStartTime) / 1000;
+
+                        // Finalizar período anterior
+                        if (postureHistory.length > 0) {
+                            postureHistory[postureHistory.length - 1].endTime = recordTime;
+                        }
+
+                        // Iniciar novo período
+                        postureHistory.push({ posture: detectedPosture, startTime: recordTime });
+
+                        // Adicionar marcador automático
+                        const label = POSTURE_LABELS[detectedPosture] || detectedPosture;
+                        recordedMarkers.push({
+                            time: recordTime,
+                            label: `📍 ${label} (Polar)`
+                        });
+
+                        currentPosture = detectedPosture;
+                        console.log(`📍 Postura (Polar H10): ${label} @ ${recordTime.toFixed(1)}s`);
+                    }
+
+                    lastAccelData.timestamp = now;
+                }
+            }
+
+            // Análise de postura usando dados do acelerômetro do Polar H10 (no peito)
+            function analyzePostureFromPolar(buffer) {
+                // Calcular médias
+                const avgX = buffer.reduce((s, b) => s + b.x, 0) / buffer.length;
+                const avgY = buffer.reduce((s, b) => s + b.y, 0) / buffer.length;
+                const avgZ = buffer.reduce((s, b) => s + b.z, 0) / buffer.length;
+
+                // Variância para detectar movimento
+                const varX = buffer.reduce((s, b) => s + Math.pow(b.x - avgX, 2), 0) / buffer.length;
+                const varY = buffer.reduce((s, b) => s + Math.pow(b.y - avgY, 2), 0) / buffer.length;
+                const varZ = buffer.reduce((s, b) => s + Math.pow(b.z - avgZ, 2), 0) / buffer.length;
+                const totalVar = Math.sqrt(varX + varY + varZ);
+
+                // Magnitude da gravidade
+                const gMag = Math.sqrt(avgX * avgX + avgY * avgY + avgZ * avgZ);
+
+                // No Polar H10 no peito:
+                // - Deitado de costas: Z aponta para cima (~1000mg), X e Y ~0
+                // - Em pé: Y aponta para baixo (~1000mg), X e Z ~0
+                // - Deitado de lado: X ou Y dominante
+
+                const absX = Math.abs(avgX);
+                const absY = Math.abs(avgY);
+                const absZ = Math.abs(avgZ);
+                const maxAxis = Math.max(absX, absY, absZ);
+
+                // Thresholds (em mg)
+                const HIGH_MOVEMENT = 200; // mg de variância = exercício
+                const MED_MOVEMENT = 100;  // mg de variância = caminhada
+                const GRAVITY = 800;       // mg para detectar eixo dominante
+
+                // Detectar exercício (alta variância)
+                if (totalVar > HIGH_MOVEMENT) {
+                    return 'exercicio';
+                }
+
+                // Detectar caminhada (variância média)
+                if (totalVar > MED_MOVEMENT) {
+                    return 'caminhando';
+                }
+
+                // Parado - analisar orientação
+                if (absZ > GRAVITY && absZ > absY && absZ > absX) {
+                    // Z dominante = deitado (de costas ou de bruços)
+                    return 'deitado';
+                } else if (absY > GRAVITY && absY > absX && absY > absZ) {
+                    // Y dominante = em pé ou sentado
+                    // Difícil diferenciar sem mais contexto
+                    // Se Y é muito alto e X,Z baixos = em pé
+                    if (absX < 300 && absZ < 300) {
+                        return 'em_pe';
+                    }
+                    return 'sentado';
+                } else if (absX > GRAVITY) {
+                    // X dominante = deitado de lado
+                    return 'deitado';
+                }
+
+                // Inclinado ou posição intermediária
+                if (absY > absZ) {
+                    return 'sentado';
+                }
+
+                return null; // Manter postura atual
+            }
+
+            function handleECGData(bytes) {
                 const sampleTimeIncrement = 1 / SAMPLE_RATE_HZ;
                 // Tempo para visualização ao vivo (desde conexão)
                 let liveTime = (Date.now() - startTime) / 1000;
@@ -896,29 +1061,28 @@
                 setSaveButtonsState();
             }
 
-            // Detecção de postura via acelerômetro do dispositivo
+            // Detecção de postura - usa acelerômetro do Polar H10 como primário, celular como fallback
             function startPostureDetection() {
-                if (!window.DeviceMotionEvent) {
-                    console.warn('DeviceMotion não suportado neste dispositivo');
-                    return;
-                }
-
                 postureDetectionActive = true;
+                polarAccBuffer = []; // Limpar buffer do Polar
 
-                // Solicitar permissão em iOS
-                if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                    DeviceMotionEvent.requestPermission()
-                        .then(response => {
-                            if (response === 'granted') {
-                                window.addEventListener('devicemotion', handleDeviceMotion);
-                            }
-                        })
-                        .catch(console.error);
-                } else {
-                    window.addEventListener('devicemotion', handleDeviceMotion);
+                // Polar H10: dados vêm automaticamente via PMD (handleACCData)
+                console.log('📍 Detecção de postura iniciada (Polar H10 + fallback celular)');
+
+                // Fallback: acelerômetro do celular (caso Polar não envie ACC)
+                if (window.DeviceMotionEvent) {
+                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                        DeviceMotionEvent.requestPermission()
+                            .then(response => {
+                                if (response === 'granted') {
+                                    window.addEventListener('devicemotion', handleDeviceMotion);
+                                }
+                            })
+                            .catch(console.error);
+                    } else {
+                        window.addEventListener('devicemotion', handleDeviceMotion);
+                    }
                 }
-
-                console.log('📍 Detecção de postura iniciada');
             }
 
             function stopPostureDetection() {
