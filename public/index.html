@@ -385,6 +385,45 @@
             </div>
         </div>
     </main>
+
+    <!-- Modal de Posição Inicial -->
+    <div id="posture-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 mx-4 max-w-sm w-full">
+            <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">📍 Posição Inicial</h3>
+            <p class="text-gray-600 text-sm mb-4 text-center">Selecione a posição do paciente para iniciar a gravação:
+            </p>
+            <div class="grid grid-cols-1 gap-3">
+                <button data-posture="deitado"
+                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
+                    <span class="text-2xl">🛏️</span>
+                    <span class="font-semibold text-gray-700">Deitado</span>
+                </button>
+                <button data-posture="sentado"
+                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
+                    <span class="text-2xl">🪑</span>
+                    <span class="font-semibold text-gray-700">Sentado</span>
+                </button>
+                <button data-posture="em_pe"
+                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
+                    <span class="text-2xl">🧍</span>
+                    <span class="font-semibold text-gray-700">Em Pé</span>
+                </button>
+                <button data-posture="caminhando"
+                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
+                    <span class="text-2xl">🚶</span>
+                    <span class="font-semibold text-gray-700">Caminhando</span>
+                </button>
+                <button data-posture="exercicio"
+                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
+                    <span class="text-2xl">🏃</span>
+                    <span class="font-semibold text-gray-700">Exercício</span>
+                </button>
+            </div>
+            <button id="posture-modal-cancel"
+                class="mt-4 w-full py-2 text-gray-500 hover:text-gray-700 text-sm">Cancelar</button>
+        </div>
+    </div>
+
     <footer class="bg-white mt-8 py-4">
         <div class="container mx-auto text-center text-sm text-gray-500">
             <p>&copy; 2025-2027 CardioMetric - Projeto de Validação.</p>
@@ -431,6 +470,8 @@
                 hrOverlayAvg: document.getElementById('hr-overlay-avg'),
                 hrOverlayPeak: document.getElementById('hr-overlay-peak'),
                 hrTrendChartCanvas: document.getElementById('hrTrendChart'),
+                postureModal: document.getElementById('posture-modal'),
+                postureModalCancel: document.getElementById('posture-modal-cancel'),
             };
 
             let ecgChart, reviewChart, hrTrendChart, timerInterval, recordedData = [], recordedMarkers = [], liveBuffer = [], frozenBuffer = [], frozenSource = [], isRecording = false, isConnected = false, isFrozen = false, polarDevice, startTime, signalProcessor;
@@ -442,6 +483,19 @@
             let lastHr = null, lastRr = [];
             let hrSamples = [], avgHr = 0, peakHr = 0, minHr = 300;
             let enableLiveFilter = true;
+
+            // Sistema de detecção de postura
+            let currentPosture = null; // deitado, sentado, em_pe, caminhando, exercicio
+            let postureHistory = []; // { posture, startTime, endTime }
+            let lastAccelData = { x: 0, y: 0, z: 0, timestamp: 0 };
+            let postureDetectionActive = false;
+            const POSTURE_LABELS = {
+                'deitado': '🛏️ Deitado',
+                'sentado': '🪑 Sentado',
+                'em_pe': '🧍 Em Pé',
+                'caminhando': '🚶 Caminhando',
+                'exercicio': '🏃 Exercício'
+            };
 
             // Aviso ao tentar sair da página com dados não salvos
             window.addEventListener('beforeunload', (e) => {
@@ -761,32 +815,212 @@
             allElements.connectButton.addEventListener('click', () => { isConnected ? updateConnectionStatus(false) : connectToPolar(); });
 
             allElements.recordButton.addEventListener('click', async () => {
-                isRecording = !isRecording;
-                allElements.recordButton.textContent = isRecording ? 'Parar Gravação' : 'Iniciar Gravação';
-                allElements.recordButton.classList.toggle('btn-record-active', isRecording);
-                allElements.reviewSection.classList.add('hidden');
-                allElements.markerSection.classList.toggle('hidden', !isRecording);
-                if (isRecording) {
-                    recordedData = [];
-                    recordedMarkers = [];
-                    recordingStartTime = Date.now(); // RESET: tempo começa do zero ao gravar
-                    hasUnsavedData = true; // Marcar dados não salvos
-                    resetMetrics();
-                    allElements.metricsPanel.classList.remove('hidden');
-                    startTimer();
-                    setSaveButtonsState();
-                    await requestWakeLock(); // Manter tela ligada
-                    startAutoSave(); // Iniciar auto-save
+                if (!isRecording) {
+                    // Mostrar modal para selecionar posição inicial
+                    showPostureModal();
                 } else {
-                    stopAutoSave(); // Parar auto-save
-                    await releaseWakeLock(); // Liberar Wake Lock
-                    allElements.metricsPanel.classList.add('hidden');
-                    allElements.timerDisplay.classList.add('hidden');
-                    clearInterval(timerInterval);
-                    if (recordedData.length > 0) displayReview();
-                    setSaveButtonsState();
+                    // Parar gravação
+                    await stopRecording();
                 }
             });
+
+            function showPostureModal() {
+                allElements.postureModal.classList.remove('hidden');
+                allElements.postureModal.classList.add('flex');
+            }
+
+            function hidePostureModal() {
+                allElements.postureModal.classList.add('hidden');
+                allElements.postureModal.classList.remove('flex');
+            }
+
+            // Listeners dos botões de postura no modal
+            document.querySelectorAll('.posture-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const posture = btn.dataset.posture;
+                    currentPosture = posture;
+                    postureHistory = [{ posture, startTime: 0 }];
+                    hidePostureModal();
+                    await startRecordingWithPosture(posture);
+                });
+            });
+
+            // Cancelar modal
+            allElements.postureModalCancel.addEventListener('click', hidePostureModal);
+
+            async function startRecordingWithPosture(posture) {
+                isRecording = true;
+                allElements.recordButton.textContent = 'Parar Gravação';
+                allElements.recordButton.classList.toggle('btn-record-active', true);
+                allElements.reviewSection.classList.add('hidden');
+                allElements.markerSection.classList.toggle('hidden', false);
+
+                recordedData = [];
+                recordedMarkers = [];
+                recordingStartTime = Date.now();
+                hasUnsavedData = true;
+                resetMetrics();
+                allElements.metricsPanel.classList.remove('hidden');
+                startTimer();
+                setSaveButtonsState();
+                await requestWakeLock();
+                startAutoSave();
+
+                // Adicionar marcador de posição inicial
+                const label = POSTURE_LABELS[posture] || posture;
+                recordedMarkers.push({ time: 0, label: `📍 ${label} (início)` });
+
+                // Iniciar detecção de postura via acelerômetro
+                startPostureDetection();
+            }
+
+            async function stopRecording() {
+                isRecording = false;
+                allElements.recordButton.textContent = 'Iniciar Gravação';
+                allElements.recordButton.classList.toggle('btn-record-active', false);
+
+                stopPostureDetection();
+
+                // Finalizar último período de postura
+                if (postureHistory.length > 0) {
+                    const lastRecord = postureHistory[postureHistory.length - 1];
+                    lastRecord.endTime = (Date.now() - recordingStartTime) / 1000;
+                }
+
+                stopAutoSave();
+                await releaseWakeLock();
+                allElements.metricsPanel.classList.add('hidden');
+                allElements.timerDisplay.classList.add('hidden');
+                clearInterval(timerInterval);
+                if (recordedData.length > 0) displayReview();
+                setSaveButtonsState();
+            }
+
+            // Detecção de postura via acelerômetro do dispositivo
+            function startPostureDetection() {
+                if (!window.DeviceMotionEvent) {
+                    console.warn('DeviceMotion não suportado neste dispositivo');
+                    return;
+                }
+
+                postureDetectionActive = true;
+
+                // Solicitar permissão em iOS
+                if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                    DeviceMotionEvent.requestPermission()
+                        .then(response => {
+                            if (response === 'granted') {
+                                window.addEventListener('devicemotion', handleDeviceMotion);
+                            }
+                        })
+                        .catch(console.error);
+                } else {
+                    window.addEventListener('devicemotion', handleDeviceMotion);
+                }
+
+                console.log('📍 Detecção de postura iniciada');
+            }
+
+            function stopPostureDetection() {
+                postureDetectionActive = false;
+                window.removeEventListener('devicemotion', handleDeviceMotion);
+                console.log('📍 Detecção de postura parada');
+            }
+
+            let motionBuffer = [];
+            const MOTION_BUFFER_SIZE = 30; // ~0.5s a 60Hz
+
+            function handleDeviceMotion(event) {
+                if (!postureDetectionActive || !isRecording) return;
+
+                const acc = event.accelerationIncludingGravity;
+                if (!acc) return;
+
+                const now = Date.now();
+                motionBuffer.push({ x: acc.x, y: acc.y, z: acc.z, t: now });
+
+                // Manter buffer limitado
+                if (motionBuffer.length > MOTION_BUFFER_SIZE) {
+                    motionBuffer.shift();
+                }
+
+                // Analisar a cada 1 segundo
+                if (motionBuffer.length >= MOTION_BUFFER_SIZE && now - lastAccelData.timestamp > 1000) {
+                    const detectedPosture = analyzePosture(motionBuffer);
+
+                    if (detectedPosture && detectedPosture !== currentPosture) {
+                        const recordTime = (now - recordingStartTime) / 1000;
+
+                        // Finalizar período anterior
+                        if (postureHistory.length > 0) {
+                            postureHistory[postureHistory.length - 1].endTime = recordTime;
+                        }
+
+                        // Iniciar novo período
+                        postureHistory.push({ posture: detectedPosture, startTime: recordTime });
+
+                        // Adicionar marcador automático
+                        const label = POSTURE_LABELS[detectedPosture] || detectedPosture;
+                        recordedMarkers.push({
+                            time: recordTime,
+                            label: `📍 ${label} (auto)`
+                        });
+
+                        currentPosture = detectedPosture;
+                        console.log(`📍 Postura detectada: ${label} @ ${recordTime.toFixed(1)}s`);
+                    }
+
+                    lastAccelData = { x: acc.x, y: acc.y, z: acc.z, timestamp: now };
+                }
+            }
+
+            function analyzePosture(buffer) {
+                // Calcular médias e variâncias
+                const avgX = buffer.reduce((s, b) => s + b.x, 0) / buffer.length;
+                const avgY = buffer.reduce((s, b) => s + b.y, 0) / buffer.length;
+                const avgZ = buffer.reduce((s, b) => s + b.z, 0) / buffer.length;
+
+                // Variância para detectar movimento
+                const varX = buffer.reduce((s, b) => s + Math.pow(b.x - avgX, 2), 0) / buffer.length;
+                const varY = buffer.reduce((s, b) => s + Math.pow(b.y - avgY, 2), 0) / buffer.length;
+                const varZ = buffer.reduce((s, b) => s + Math.pow(b.z - avgZ, 2), 0) / buffer.length;
+                const totalVar = varX + varY + varZ;
+
+                // Magnitude da gravidade
+                const gMag = Math.sqrt(avgX * avgX + avgY * avgY + avgZ * avgZ);
+
+                // Ângulo de inclinação (quanto maior Y em relação a Z, mais em pé)
+                const tiltAngle = Math.atan2(Math.abs(avgY), Math.abs(avgZ)) * (180 / Math.PI);
+
+                // Thresholds (ajustáveis)
+                const HIGH_MOVEMENT = 15; // Alta variância = movimento
+                const LOW_MOVEMENT = 2;   // Baixa variância = parado
+
+                // Detectar exercício (alta variância contínua)
+                if (totalVar > HIGH_MOVEMENT * 2) {
+                    return 'exercicio';
+                }
+
+                // Detectar caminhada (variância média com padrão rítmico)
+                if (totalVar > HIGH_MOVEMENT && totalVar <= HIGH_MOVEMENT * 2) {
+                    return 'caminhando';
+                }
+
+                // Parado - diferenciar posição
+                if (totalVar < LOW_MOVEMENT) {
+                    // Telefone na horizontal (deitado) vs vertical (em pé/sentado)
+                    if (tiltAngle < 30) {
+                        return 'deitado';
+                    } else if (tiltAngle > 60) {
+                        return 'em_pe';
+                    } else {
+                        return 'sentado';
+                    }
+                }
+
+                // Movimento leve - manter postura atual
+                return null;
+            }
 
             function updateFrozenChart(scrollIndex) {
                 const start = Math.max(0, scrollIndex);
