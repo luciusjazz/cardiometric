@@ -197,11 +197,41 @@
                 </div>
             </div>
             <div class="flex flex-col md:flex-row items-stretch justify-between mb-4 gap-3">
-                <div id="marker-section" class="hidden w-full flex flex-row items-center gap-2">
-                    <input type="text" id="markerInput" class="flex-1 border-gray-300 rounded-md shadow-sm py-2 px-3"
-                        placeholder="Descrição do marcador...">
-                    <button id="addMarkerButton"
-                        class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600 whitespace-nowrap">Adicionar</button>
+                <div id="marker-section" class="hidden w-full flex flex-col gap-2">
+                    <!-- Botões Rápidos -->
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <span class="text-sm font-semibold text-gray-500 mr-2">Marcadores:</span>
+                        <button onclick="addQuickMarker('🛏️ Deitado')"
+                            class="quick-marker-btn bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🛏️
+                            Deitado</button>
+                        <button onclick="addQuickMarker('🪑 Sentado')"
+                            class="quick-marker-btn bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🪑
+                            Sentado</button>
+                        <button onclick="addQuickMarker('🧍 Em Pé')"
+                            class="quick-marker-btn bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🧍
+                            Em Pé</button>
+                        <button onclick="addQuickMarker('🚶 Caminhando')"
+                            class="quick-marker-btn bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🚶
+                            Caminhando</button>
+                        <button onclick="addQuickMarker('🏃 Exercício')"
+                            class="quick-marker-btn bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🏃
+                            Exercício</button>
+                        <button onclick="addQuickMarker('🧘 Recuperação')"
+                            class="quick-marker-btn bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🧘
+                            Recuperação</button>
+                        <button id="toggleCustomMarkerBtn"
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border border-gray-300">➕
+                            Outros</button>
+                    </div>
+
+                    <!-- Input Customizado (Oculto por padrão) -->
+                    <div id="customMarkerContainer" class="hidden flex flex-row items-center gap-2 mt-1">
+                        <input type="text" id="markerInput"
+                            class="flex-1 border-gray-300 rounded-md shadow-sm py-2 px-3 text-sm"
+                            placeholder="Digite o marcador...">
+                        <button id="addMarkerButton"
+                            class="bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 text-sm">Salvar</button>
+                    </div>
                 </div>
                 <div class="w-full md:w-auto flex flex-col sm:flex-row gap-3">
                     <button id="connectButton"
@@ -1236,6 +1266,34 @@
                 allElements.lockScreenButton.addEventListener('click', lockScreen);
             }
 
+            // Função global para markers rápidos
+            window.addQuickMarker = function (label) {
+                if (!isRecording) return;
+                addMarker(label);
+
+                // Feedback visual no botão
+                const buttons = document.querySelectorAll('.quick-marker-btn');
+                buttons.forEach(btn => {
+                    if (btn.innerText.includes(label)) {
+                        const originalBg = btn.className;
+                        btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
+                        setTimeout(() => {
+                            btn.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
+                        }, 200);
+                    }
+                });
+            };
+
+            // Listener para o toggleCustomMarkerBtn
+            if (allElements.toggleCustomMarkerBtn) {
+                allElements.toggleCustomMarkerBtn.addEventListener('click', () => {
+                    allElements.customMarkerContainer.classList.toggle('hidden');
+                    if (!allElements.customMarkerContainer.classList.contains('hidden')) {
+                        allElements.markerInput.focus();
+                    }
+                });
+            }
+
             async function startRecordingWithPosture(posture) {
                 isRecording = true;
                 allElements.recordButton.textContent = 'Parar Gravação';
@@ -2096,12 +2154,58 @@
                     doc.text('Tendência de Frequência Cardíaca', pageWidth / 2, margin + 5, { align: 'center' });
                     doc.setFont('helvetica', 'normal');
 
+
                     // Informações do paciente em formato elegante
                     doc.setFontSize(9);
                     doc.setTextColor(80);
                     doc.text(`Participante: ${pId}`, margin + 20, margin + 18);
                     doc.text(`Condição: ${cond}`, margin + 20, margin + 24);
                     doc.text(`Data: ${new Date().toLocaleString()}`, pageWidth - margin - 20, margin + 18, { align: 'right' });
+
+                    // --- Tabela de Resumo de Posturas ---
+                    if (postureHistory && postureHistory.length > 0) {
+                        const stats = {};
+                        const totalDur = cleaned[cleaned.length - 1].time;
+
+                        // Processar histórico
+                        postureHistory.forEach((item, idx) => {
+                            let endTime = item.endTime;
+                            if (!endTime) {
+                                // Se for o último item, vai até o fim da gravação
+                                if (idx === postureHistory.length - 1) endTime = totalDur;
+                                // Se não for último e não tem fim, usa início do próximo (failsafe)
+                                else endTime = postureHistory[idx + 1].startTime;
+                            }
+                            const duration = Math.max(0, endTime - item.startTime);
+                            const label = POSTURE_LABELS[item.posture] || item.posture;
+                            stats[label] = (stats[label] || 0) + duration;
+                        });
+
+                        // Desenhar tabela resumida no topo à direita
+                        const tableX = pageWidth - margin - 80;
+                        const tableY = margin + 25;
+                        const rowH = 5;
+
+                        doc.setFontSize(8); doc.setTextColor(0);
+                        doc.setFont('helvetica', 'bold');
+                        doc.text('Tempo por Posição:', tableX, tableY);
+                        doc.setFont('helvetica', 'normal');
+
+                        let pi = 0;
+                        Object.entries(stats).forEach(([pos, dur]) => {
+                            if (dur > 0) {
+                                const min = Math.floor(dur / 60);
+                                const sec = Math.floor(dur % 60);
+                                const timeStr = `${min}m ${sec}s`;
+
+                                doc.text(`• ${pos}:`, tableX, tableY + 5 + (pi * rowH));
+                                doc.text(timeStr, tableX + 45, tableY + 5 + (pi * rowH), { align: 'right' });
+                                pi++;
+                            }
+                        });
+                    }
+                    // ------------------------------------
+
 
                     // Métricas em caixas elegantes
                     const metricsY = margin + 35;
