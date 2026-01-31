@@ -1266,32 +1266,56 @@
                 allElements.lockScreenButton.addEventListener('click', lockScreen);
             }
 
+
+            // Função para adicionar marcador
+            function addMarker(label) {
+                if (!isRecording) return;
+                const time = recordingStartTime ? (Date.now() - recordingStartTime) / 1000 : 0;
+                recordedMarkers.push({ time: parseFloat(time.toFixed(2)), label: label || 'Marcador' });
+                updateLiveMarkersDataset();
+            }
+
             // Função global para markers rápidos
             window.addQuickMarker = function (label) {
-                if (!isRecording) return;
-                addMarker(label);
-
-                // Feedback visual no botão
+                // Feedback visual de clique (mesmo sem gravar, para teste de UI)
                 const buttons = document.querySelectorAll('.quick-marker-btn');
                 buttons.forEach(btn => {
-                    if (btn.innerText.includes(label)) {
-                        const originalBg = btn.className;
-                        btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
+                    if (btn.innerText.includes(label.split(' ')[1] || label)) { // Match parcial do ícone ou texto
+                        btn.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500', 'bg-blue-200');
                         setTimeout(() => {
-                            btn.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
+                            btn.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500', 'bg-blue-200');
                         }, 200);
                     }
                 });
+
+                if (!isRecording) {
+                    alert('Inicie a gravação para adicionar marcadores.');
+                    return;
+                }
+
+                addMarker(label);
             };
 
             // Listener para o toggleCustomMarkerBtn
             if (allElements.toggleCustomMarkerBtn) {
                 allElements.toggleCustomMarkerBtn.addEventListener('click', () => {
-                    allElements.customMarkerContainer.classList.toggle('hidden');
-                    if (!allElements.customMarkerContainer.classList.contains('hidden')) {
-                        allElements.markerInput.focus();
+                    if (allElements.customMarkerContainer) {
+                        allElements.customMarkerContainer.classList.toggle('hidden');
+                        if (!allElements.customMarkerContainer.classList.contains('hidden')) {
+                            allElements.markerInput.focus();
+                        }
                     }
                 });
+            }
+
+            // Listener para o botão Salvar do input customizado
+            if (allElements.addMarkerButton) {
+                // Remover listener antigo (embora addEventListener acumule, vamos garantir que a logica nova prevaleça se possivel, mas aqui só adiciono novo)
+                // O ideal seria substituir o listener antigo lá embaixo
+
+                // Melhor estratégia: Deixar o listener antigo lá embaixo ser substituído ou ignorado se eu alterar o comportamento aqui?
+                // Não consigo remover event listener anônimo.
+                // Mas posso alterar a logica lá embaixo.
             }
 
             async function startRecordingWithPosture(posture) {
@@ -1534,13 +1558,21 @@
             });
 
             allElements.addMarkerButton.addEventListener('click', () => {
-                if (!isRecording) return;
-                // Tempo relativo ao início da gravação (não da conexão)
-                const time = recordingStartTime ? (Date.now() - recordingStartTime) / 1000 : 0;
-                const label = allElements.markerInput.value || 'Marcador';
-                recordedMarkers.push({ time: time, label: label });
+                const label = allElements.markerInput.value;
+                if (!label) return; // Não adiciona vazio
+
+                if (!isRecording) {
+                    alert('Inicie a gravação para adicionar marcadores.');
+                    return;
+                }
+
+                addMarker(label);
                 allElements.markerInput.value = '';
-                updateLiveMarkersDataset();
+
+                // Esconder o container customizado se estiver visível
+                if (allElements.customMarkerContainer) {
+                    allElements.customMarkerContainer.classList.add('hidden');
+                }
             });
 
             // Extrai dados de FC únicos para o gráfico de tendência
