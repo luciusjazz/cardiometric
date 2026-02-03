@@ -200,28 +200,23 @@
                 <div id="marker-section" class="hidden w-full flex flex-col gap-2">
                     <!-- Botões Rápidos -->
                     <div class="flex flex-wrap gap-2 items-center">
-                        <span class="text-sm font-semibold text-gray-500 mr-2">Marcadores:</span>
-                        <button onclick="addQuickMarker('🛏️ Deitado')"
-                            class="quick-marker-btn bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🛏️
-                            Deitado</button>
-                        <button onclick="addQuickMarker('🪑 Sentado')"
-                            class="quick-marker-btn bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🪑
-                            Sentado</button>
-                        <button onclick="addQuickMarker('🧍 Em Pé')"
-                            class="quick-marker-btn bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🧍
-                            Em Pé</button>
-                        <button onclick="addQuickMarker('🚶 Caminhando')"
-                            class="quick-marker-btn bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🚶
-                            Caminhando</button>
-                        <button onclick="addQuickMarker('🏃 Exercício')"
-                            class="quick-marker-btn bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🏃
-                            Exercício</button>
-                        <button onclick="addQuickMarker('🧘 Recuperação')"
-                            class="quick-marker-btn bg-teal-100 hover:bg-teal-200 text-teal-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🧘
+                        <span class="text-sm font-semibold text-gray-500 mr-2">Fases:</span>
+                        <button onclick="addQuickMarker('repouso')"
+                            class="quick-marker-btn bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🛌
+                            Repouso</button>
+                        <button onclick="addQuickMarker('esforco')"
+                            class="quick-marker-btn bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">⚡
+                            Esforço</button>
+                        <button onclick="addQuickMarker('recuperacao')"
+                            class="quick-marker-btn bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1">🔋
                             Recuperação</button>
+
+                        <div class="w-px h-6 bg-gray-300 mx-2"></div>
+
                         <button id="toggleCustomMarkerBtn"
-                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full text-sm font-medium transition-colors border border-gray-300">➕
-                            Outros</button>
+                            class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full text-sm font-medium transition-colors flex items-center gap-1 border border-gray-300">
+                            ➕ Outros
+                        </button>
                     </div>
 
                     <!-- Input Customizado (Oculto por padrão) -->
@@ -428,48 +423,26 @@
     <div id="posture-modal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
         <div class="bg-white rounded-xl shadow-2xl p-6 mx-4 max-w-sm w-full">
             <h3 class="text-xl font-bold text-gray-800 mb-4 text-center">📍 Posição Inicial</h3>
-            <p class="text-gray-600 text-sm mb-4 text-center">Selecione a posição do paciente para iniciar a gravação:
+            <p class="text-gray-600 text-sm mb-4 text-center">Selecione o estado inicial do paciente:
             </p>
             <div class="grid grid-cols-1 gap-3">
-                <button data-posture="deitado"
+                <button data-posture="repouso"
                     class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
-                    <span class="text-2xl">🛏️</span>
-                    <span class="font-semibold text-gray-700">Deitado</span>
+                    <span class="text-2xl">🛌</span>
+                    <span class="font-semibold text-gray-700">Repouso</span>
                 </button>
-                <button data-posture="sentado"
-                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
-                    <span class="text-2xl">🪑</span>
-                    <span class="font-semibold text-gray-700">Sentado</span>
+                <button data-posture="esforco"
+                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-red-500 hover:bg-red-50 transition-all">
+                    <span class="text-2xl">⚡</span>
+                    <span class="font-semibold text-gray-700">Esforço</span>
                 </button>
-                <button data-posture="em_pe"
-                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
-                    <span class="text-2xl">🧍</span>
-                    <span class="font-semibold text-gray-700">Em Pé</span>
-                </button>
-                <button data-posture="caminhando"
-                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
-                    <span class="text-2xl">🚶</span>
-                    <span class="font-semibold text-gray-700">Caminhando</span>
-                </button>
-                <button data-posture="exercicio"
-                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all">
-                    <span class="text-2xl">🏃</span>
-                    <span class="font-semibold text-gray-700">Exercício</span>
+                <button data-posture="recuperacao"
+                    class="posture-btn flex items-center gap-3 p-4 rounded-lg border-2 border-gray-200 hover:border-green-500 hover:bg-green-50 transition-all">
+                    <span class="text-2xl">🔋</span>
+                    <span class="font-semibold text-gray-700">Recuperação</span>
                 </button>
             </div>
 
-            <!-- Toggle para detecção automática -->
-            <div class="mt-4 p-3 bg-gray-50 rounded-lg">
-                <label class="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" id="auto-posture-toggle"
-                        class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" checked>
-                    <div>
-                        <span class="font-medium text-gray-700 text-sm">Detectar mudanças automaticamente</span>
-                        <p class="text-xs text-gray-500">Usa o acelerômetro do celular. Desative se o celular ficar com
-                            o pesquisador.</p>
-                    </div>
-                </label>
-            </div>
 
             <button id="posture-modal-cancel"
                 class="mt-4 w-full py-2 text-gray-500 hover:text-gray-700 text-sm">Cancelar</button>
@@ -522,6 +495,8 @@
                 participantIdInput: document.getElementById('participantId'), conditionSelect: document.getElementById('conditionSelect'),
                 markerSection: document.getElementById('marker-section'), markerInput: document.getElementById('markerInput'),
                 addMarkerButton: document.getElementById('addMarkerButton'),
+                toggleCustomMarkerBtn: document.getElementById('toggleCustomMarkerBtn'),
+                customMarkerContainer: document.getElementById('customMarkerContainer'),
                 timerDisplay: document.getElementById('timer-display'), timerValue: document.getElementById('timer-value'),
                 scrollContainer: document.getElementById('scroll-container'), scrollBar: document.getElementById('scroll-bar'),
                 reviewFilterInputsContainer: document.getElementById('review-filter-inputs'),
@@ -559,16 +534,12 @@
             let enableLiveFilter = true;
 
             // Sistema de detecção de postura
-            let currentPosture = null; // deitado, sentado, em_pe, caminhando, exercicio
+            let currentPosture = 'repouso';
             let postureHistory = []; // { posture, startTime, endTime }
-            let lastAccelData = { x: 0, y: 0, z: 0, timestamp: 0 };
-            let postureDetectionActive = false;
             const POSTURE_LABELS = {
-                'deitado': '🛏️ Deitado',
-                'sentado': '🪑 Sentado',
-                'em_pe': '🧍 Em Pé',
-                'caminhando': '🚶 Caminhando',
-                'exercicio': '🏃 Exercício'
+                'repouso': '🛌 Repouso',
+                'esforco': '⚡ Esforço',
+                'recuperacao': '🔋 Recuperação'
             };
 
             // Aviso ao tentar sair da página com dados não salvos
@@ -1045,11 +1016,9 @@
 
             // Icons para cada posição
             const POSTURE_ICONS = {
-                'deitado': '🛏️',
-                'sentado': '🪑',
-                'em_pe': '🧍',
-                'caminhando': '🚶',
-                'exercicio': '🏃'
+                'repouso': '🛌',
+                'esforco': '⚡',
+                'recuperacao': '🔋'
             };
 
             function updatePostureDisplay(posture, source = '') {
@@ -1276,7 +1245,7 @@
             }
 
             // Função global para markers rápidos
-            window.addQuickMarker = function (label) {
+            window.addQuickMarker = function (key) {
                 // Feedback visual de clique (mesmo sem gravar, para teste de UI)
                 const buttons = document.querySelectorAll('.quick-marker-btn');
                 buttons.forEach(btn => {
@@ -1350,18 +1319,8 @@
                 postureHistory = [{ posture: posture, startTime: 0 }];
                 updatePostureDisplay(posture, 'manual');
 
-                // Iniciar detecção de postura via acelerômetro apenas se toggle estiver ativado
-                const autoDetect = allElements.autoPostureToggle ? allElements.autoPostureToggle.checked : true;
-                if (autoDetect) {
-                    startPostureDetection();
-                    console.log('📱 Detecção automática de postura ATIVADA');
-                } else {
-                    console.log('📱 Detecção automática de postura DESATIVADA (modo pesquisa)');
-                    // Esconder botão de bloqueio se não está detectando (celular fica com pesquisador)
-                    if (allElements.lockScreenButton) {
-                        allElements.lockScreenButton.classList.add('hidden');
-                    }
-                }
+                // Detecção automática removida
+                console.log('📱 Gravação iniciada. Fases definidas manualmente.');
             }
 
             async function stopRecording() {
@@ -1369,7 +1328,7 @@
                 allElements.recordButton.textContent = 'Iniciar Gravação';
                 allElements.recordButton.classList.toggle('btn-record-active', false);
 
-                stopPostureDetection();
+
 
                 // Esconder indicador de posição
                 updatePostureDisplay(null);
@@ -1399,130 +1358,7 @@
             }
 
             // Detecção de postura - usa acelerômetro do Polar H10 como primário, celular como fallback
-            function startPostureDetection() {
-                postureDetectionActive = true;
-                polarAccBuffer = []; // Limpar buffer do Polar
 
-                // Polar H10: dados vêm automaticamente via PMD (handleACCData)
-                console.log('📍 Detecção de postura iniciada (Polar H10 + fallback celular)');
-
-                // Fallback: acelerômetro do celular (caso Polar não envie ACC)
-                if (window.DeviceMotionEvent) {
-                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                        DeviceMotionEvent.requestPermission()
-                            .then(response => {
-                                if (response === 'granted') {
-                                    window.addEventListener('devicemotion', handleDeviceMotion);
-                                }
-                            })
-                            .catch(console.error);
-                    } else {
-                        window.addEventListener('devicemotion', handleDeviceMotion);
-                    }
-                }
-            }
-
-            function stopPostureDetection() {
-                postureDetectionActive = false;
-                window.removeEventListener('devicemotion', handleDeviceMotion);
-                console.log('📍 Detecção de postura parada');
-            }
-
-            let motionBuffer = [];
-            const MOTION_BUFFER_SIZE = 30; // ~0.5s a 60Hz
-
-            function handleDeviceMotion(event) {
-                if (!postureDetectionActive || !isRecording) return;
-
-                const acc = event.accelerationIncludingGravity;
-                if (!acc) return;
-
-                const now = Date.now();
-                motionBuffer.push({ x: acc.x, y: acc.y, z: acc.z, t: now });
-
-                // Manter buffer limitado
-                if (motionBuffer.length > MOTION_BUFFER_SIZE) {
-                    motionBuffer.shift();
-                }
-
-                // Analisar a cada 1 segundo
-                if (motionBuffer.length >= MOTION_BUFFER_SIZE && now - lastAccelData.timestamp > 1000) {
-                    const detectedPosture = analyzePosture(motionBuffer);
-
-                    if (detectedPosture && detectedPosture !== currentPosture) {
-                        const recordTime = (now - recordingStartTime) / 1000;
-
-                        // Finalizar período anterior
-                        if (postureHistory.length > 0) {
-                            postureHistory[postureHistory.length - 1].endTime = recordTime;
-                        }
-
-                        // Iniciar novo período
-                        postureHistory.push({ posture: detectedPosture, startTime: recordTime });
-
-                        // Adicionar marcador automático
-                        const label = POSTURE_LABELS[detectedPosture] || detectedPosture;
-                        recordedMarkers.push({
-                            time: recordTime,
-                            label: `📍 ${label} (auto)`
-                        });
-
-                        currentPosture = detectedPosture;
-                        updatePostureDisplay(detectedPosture, 'celular');
-                        console.log(`📍 Postura detectada: ${label} @ ${recordTime.toFixed(1)}s`);
-                    }
-
-                    lastAccelData = { x: acc.x, y: acc.y, z: acc.z, timestamp: now };
-                }
-            }
-
-            function analyzePosture(buffer) {
-                // Calcular médias e variâncias
-                const avgX = buffer.reduce((s, b) => s + b.x, 0) / buffer.length;
-                const avgY = buffer.reduce((s, b) => s + b.y, 0) / buffer.length;
-                const avgZ = buffer.reduce((s, b) => s + b.z, 0) / buffer.length;
-
-                // Variância para detectar movimento
-                const varX = buffer.reduce((s, b) => s + Math.pow(b.x - avgX, 2), 0) / buffer.length;
-                const varY = buffer.reduce((s, b) => s + Math.pow(b.y - avgY, 2), 0) / buffer.length;
-                const varZ = buffer.reduce((s, b) => s + Math.pow(b.z - avgZ, 2), 0) / buffer.length;
-                const totalVar = varX + varY + varZ;
-
-                // Magnitude da gravidade
-                const gMag = Math.sqrt(avgX * avgX + avgY * avgY + avgZ * avgZ);
-
-                // Ângulo de inclinação (quanto maior Y em relação a Z, mais em pé)
-                const tiltAngle = Math.atan2(Math.abs(avgY), Math.abs(avgZ)) * (180 / Math.PI);
-
-                // Thresholds (ajustáveis)
-                const HIGH_MOVEMENT = 15; // Alta variância = movimento
-                const LOW_MOVEMENT = 2;   // Baixa variância = parado
-
-                // Detectar exercício (alta variância contínua)
-                if (totalVar > HIGH_MOVEMENT * 2) {
-                    return 'exercicio';
-                }
-
-                // Detectar caminhada (variância média com padrão rítmico)
-                if (totalVar > HIGH_MOVEMENT && totalVar <= HIGH_MOVEMENT * 2) {
-                    return 'caminhando';
-                }
-
-                // Parado - diferenciar posição
-                if (totalVar < LOW_MOVEMENT) {
-                    // Telefone na horizontal (deitado) vs vertical (em pé/sentado)
-                    if (tiltAngle < 30) {
-                        return 'deitado';
-                    } else if (tiltAngle > 60) {
-                        return 'em_pe';
-                    } else {
-                        return 'sentado';
-                    }
-                }
-
-                // Movimento leve - manter postura atual
-                return null;
-            }
 
             function updateFrozenChart(scrollIndex) {
                 const start = Math.max(0, scrollIndex);
@@ -2626,6 +2462,29 @@
                 allElements.markerInput.value = '';
                 updateLiveMarkersDataset();
             });
+            // Override final da função addQuickMarker para garantir funcionamento correto
+            window.addQuickMarker = function (key) {
+                const label = POSTURE_LABELS[key] || key;
+                const buttons = document.querySelectorAll('.quick-marker-btn');
+                buttons.forEach(btn => {
+                    if (btn.innerText.includes(label.split(' ')[1] || label) || (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(key))) {
+                        btn.classList.add('ring-2', 'ring-offset-1', 'ring-blue-500', 'bg-blue-200');
+                        setTimeout(() => { btn.classList.remove('ring-2', 'ring-offset-1', 'ring-blue-500', 'bg-blue-200'); }, 200);
+                    }
+                });
+                if (!isRecording) { alert('Inicie a gravação para adicionar marcadores.'); return; }
+                addMarker(label);
+                if (POSTURE_LABELS[key]) {
+                    if (currentPosture !== key) {
+                        if (postureHistory.length > 0) { postureHistory[postureHistory.length - 1].endTime = (Date.now() - recordingStartTime) / 1000; }
+                        currentPosture = key;
+                        const time = (Date.now() - recordingStartTime) / 1000;
+                        postureHistory.push({ posture: key, startTime: time });
+                        updatePostureDisplay(key);
+                        if (isScreenLocked) { const lockInd = document.getElementById('lock-posture-indicator'); if (lockInd) lockInd.textContent = `📍 ${label}`; }
+                    }
+                }
+            };
         });
     </script>
 </body>
